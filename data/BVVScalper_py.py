@@ -30,7 +30,7 @@ from data.helpfunctions import remove_duplicates
 
 class BVVScalper:
 
-    __ENCODING = "utf-8"
+    _ENCODING = "utf-8"
 
     __json_section = ["bvv_settings"]
     __json_username = __json_section + ["username"]
@@ -46,9 +46,10 @@ class BVVScalper:
         self.club_id = config.get(self.__json_club_id)
         self.bvv_date_format = config.get(self.__json_bvv_date_format)
         self.local_date_format = config.get(self.__json_local_date_format)
-        self.__request_delay = config.get(self.__json_request_delay)
+        self._request_delay = config.get(self.__json_request_delay)
 
         self.url_login = "https://bvv.volley.de/portal/core_login.action"
+        self.url_logout = "https://bvv.volley.de/portal/core_logout.action"
         self.url_license_get = "https://bvv.volley.de/portal/sw_verein_scheine!browse.action?vereinsid=" + self.club_id
         self.url_license_action = "https://bvv.volley.de/portal/sw_verein_scheine.action"
         self.url_license_execute_action = "https://bvv.volley.de/portal/sw_verein_scheine!execute.action"
@@ -60,7 +61,13 @@ class BVVScalper:
         self.url_registration_get = "https://bvv.volley.de/portal/sw_verein_anmeldungen!browse.action?vereinsid=" + self.club_id
         self.url_registration_action = "https://bvv.volley.de/portal/sw_verein_anmeldungen.action"
 
-    def __login(self):
+        self._scalped_registrations_content = None
+        self._scalped_licenses_content = None
+        self._scalped_licenses_excel = None
+        self._scalped_courses_content = None
+        self._scalp_data()
+
+    def _login(self):
         """
         Creates a session and logs into bvv portal homepage.
         :return: session object. IMPORTANT: Session must be closed using session.close() (or with block)
@@ -73,12 +80,29 @@ class BVVScalper:
         logging.info("BVV_SCALPER: logged into BVV site.")
         return session
 
-    def __request_timing(self):
+    def _logout(self, session):
+        response = session.post(self.url_logout)
+        if response.status_code != 200:
+            logging.error("BVV_SCALPER: response failed for logout")
+            return None
+
+    def _request_timing(self):
         """
         Delays the request by __request_delay, should be executed before the actual request.
         :return: None
         """
-        time.sleep(self.__request_delay)
+        time.sleep(self._request_delay)
+        return
+
+    def _scalp_data(self):
+        with self._login() as session:
+            self._request_timing()
+            self._scalped_registrations_content = self._scalp_current_registrations(session)
+            self._scalped_licenses_content = self._scalp_licenses(session)
+            self._scalped_licenses_excel = self._scalp_licenses_excel(session)
+            self._scalped_courses_content = self._scalp_courses(session)
+            self._request_timing()
+            self._logout(session)
         return
 
     # =================================================================================================================
@@ -133,30 +157,7 @@ class BVVScalper:
         return df
 
     def _fetch_current_registrations(self, start: datetime, end: datetime):
-        if start > end:
-            raise ValueError("start must be earlier than end")
-
-        logging.info(f"BVV_SCALPER: starting to fetch current registrations between {start} and {end}...")
-
-        self.__request_timing()
-        with self.__login() as session:
-            # Post filters...
-            form_data = {
-                "vereinsid": self.club_id,
-                "von": start.strftime(self.bvv_date_format),
-                "bis": end.strftime(self.bvv_date_format)
-            }
-            response = session.post(self.url_registration_action, data=form_data)
-
-            if response.status_code != 200:
-                logging.error("BVV_SCALPER: response failed for fetch_current_registrations ")
-                return None
-
-            response.encoding = BVVScalper.__ENCODING
-            content = response.text
-
-        soup = BeautifulSoup(content, 'html.parser')
-
+        soup = BeautifulSoup(self._scalped_registrations_content, 'html.parser')
         rows = soup.find('table').find_all('tr')
 
         if rows and "keine Anmeldungen für Lehrgänge im angegebenen Zeitraum gefunden" in rows[0].get_text():
@@ -186,6 +187,33 @@ class BVVScalper:
                 data.append(entry)
         logging.info(f"BVV_SCALPER: fetched current registrations between {start} and {end} (count = {len(data)}")
         return pd.DataFrame(data)
+
+    def _scalp_current_registrations(self, session, start=None, end=None):
+        self._request_timing()
+        if start is None:
+            start = datetime.now()
+            start = datetime(year=start.year - 1, month=start.month, day=start.day)
+
+        if end is None:
+            end = datetime.now()
+            end = datetime(year=end.year + 1, month=end.month, day=end.day)
+
+        if start > end:
+            raise ValueError("start must be earlier than end")
+
+        form_data = {
+            "vereinsid": self.club_id,
+            "von": start.strftime(self.bvv_date_format),
+            "bis": end.strftime(self.bvv_date_format)
+        }
+        response = session.post(self.url_registration_action, data=form_data)
+
+        if response.status_code != 200:
+            logging.error("BVV_SCALPER: response failed for fetch_current_registrations ")
+            return None
+
+        response.encoding = BVVScalper._ENCODING
+        return response.text
 
     # =================================================================================================================
     #      LICENSES
@@ -236,26 +264,7 @@ class BVVScalper:
         return df
 
     def _fetch_licenses(self):
-        self.__request_timing()
-        with self.__login() as session:
-            # Post filters...
-            form_data = {
-                "vereinsid": self.club_id,
-                "typid": "-2",
-                "gueltigkeitid": "1",
-                "personenfilterid": "0",
-                "sortertypid": "1"
-            }
-            session.post(self.url_license_action, data=form_data)
-
-            response = session.get(self.url_license_get)
-            if response.status_code != 200:
-                logging.error("BVV_SCALPER: response failed for load_licenses")
-                return None
-
-        response.encoding = BVVScalper.__ENCODING
-        content = response.text
-
+        content = self._scalped_licenses_content
         soup = BeautifulSoup(content, 'html.parser')
 
         # Find the form by ID
@@ -308,24 +317,27 @@ class BVVScalper:
         df = pd.DataFrame(entries)
         return df
 
-    def _download_licenses(self):
-        self.__request_timing()
-        url = self.url_license_execute_action
-        data = {
-            'vereinsid': self.club_id,
-            'resulttype': 'excel'
+    def _scalp_licenses(self, session):
+        self._request_timing()
+        form_data = {
+            "vereinsid": self.club_id,
+            "typid": "-2",
+            "gueltigkeitid": "1",
+            "personenfilterid": "0",
+            "sortertypid": "1"
         }
+        session.post(self.url_license_action, data=form_data)
 
-        with self.__login() as session:
-            response = session.post(url, data=data)
-            if response.status_code != 200:
-                logging.error("BVV_SCALPER: response failed for download_licenses")
-                return None
+        response = session.get(self.url_license_get)
+        if response.status_code != 200:
+            logging.error("BVV_SCALPER: response failed for load_licenses")
+            return None
 
-            with io.BytesIO(response.content) as fh:
-                df = pd.io.excel.read_excel(fh, sheet_name=0)
+        response.encoding = BVVScalper._ENCODING
+        return response.text
 
-            logging.info("BVV_SCALPER: Downloaded licenses")
+    def _download_licenses(self):
+        df = self._scalped_licenses_excel
 
         # rename columns
         new_names = {
@@ -351,6 +363,21 @@ class BVVScalper:
         df.rename(columns=new_names, inplace=True)
         return df
 
+    def _scalp_licenses_excel(self, session):
+        self._request_timing()
+        url = self.url_license_execute_action
+        data = {
+            'vereinsid': self.club_id,
+            'resulttype': 'excel'
+        }
+        response = session.post(url, data=data)
+        if response.status_code != 200:
+            logging.error("BVV_SCALPER: response failed for download_licenses")
+            return None
+
+        with io.BytesIO(response.content) as fh:
+            return pd.io.excel.read_excel(fh, sheet_name=0)
+
     # =================================================================================================================
     #      COURSES
     # =================================================================================================================
@@ -375,26 +402,8 @@ class BVVScalper:
         return courses
 
     def _fetch_courses(self):
-        self.__request_timing()
-        with self.__login() as session:
-            # check checkbox to get all courses
-            form_data = {
-                "vereinsid": self.club_id,
-                "alle": "true",
-                "_checkbox_alle": "true"
-            }
-            form_action_url = self.url_course_action
-            session.post(form_action_url, data=form_data)
-
-            # Fetch page data
-            response = session.get(self.url_course_get)
-            if response.status_code != 200:  # status_code 200 == success
-                return []
-
-        response.encoding = BVVScalper.__ENCODING
-        decoded_content = response.text
-
-        soup = BeautifulSoup(decoded_content, 'html.parser')
+        content = self._scalped_courses_content
+        soup = BeautifulSoup(content, 'html.parser')
 
         # Find the course table by its class name
         table = soup.find('table', {'class': 'portaltable'})
@@ -446,6 +455,25 @@ class BVVScalper:
         logging.info("BVV_SCALPER: fetched courses")
         return df
 
+    def _scalp_courses(self, session):
+        self._request_timing()
+        # check checkbox to get all courses
+        form_data = {
+            "vereinsid": self.club_id,
+            "alle": "true",
+            "_checkbox_alle": "true"
+        }
+        form_action_url = self.url_course_action
+        session.post(form_action_url, data=form_data)
+
+        # Fetch page data
+        response = session.get(self.url_course_get)
+        if response.status_code != 200:  # status_code 200 == success
+            return []
+
+        response.encoding = BVVScalper._ENCODING
+        return response.text
+
     def _fetch_deep_course_info(self, lids: Union[list[str], str]):
         """
         Fetches deep course info
@@ -454,15 +482,16 @@ class BVVScalper:
         """
         if isinstance(lids, str):
             lids = [lids]
-        self.__request_timing()
+        self._request_timing()
 
         contents = []
-        with self.__login() as session:
+        with self._login() as session:
             for lid in lids:
                 url = self.url_course_deep_get + f"&lid={lid}"
                 response = session.get(url)
-                response.encoding = self.__ENCODING
+                response.encoding = self._ENCODING
                 contents.append(response.text)
+            self._logout(session)
 
         res = []
         for i in range(len(lids)):
@@ -653,8 +682,8 @@ class BVVScalper:
     def _fetch_personal_data_by_bvv_ids(self, bvv_user_ids: list[str]):
         contents = []
 
-        self.__request_timing()
-        with self.__login() as session:
+        self._request_timing()
+        with self._login() as session:
             for bvv_user_id in bvv_user_ids:
                 # get personal info with bvv_user_id
                 get_url = self.url_person_search_get + "&userid=" + str(bvv_user_id)
@@ -663,8 +692,9 @@ class BVVScalper:
                     logging.error(f"BVV_SCALPER: response failed for get_personal_info (bvv_user_id = {bvv_user_id})")
                     continue
 
-                response.encoding = self.__ENCODING
+                response.encoding = self._ENCODING
                 contents.append(response.text)
+            self._logout(session)
 
         res_data = []
         for content in contents:
@@ -700,8 +730,8 @@ class BVVScalper:
         id_contents = []
         bvv_user_ids = []
 
-        self.__request_timing()
-        with self.__login() as session:
+        self._request_timing()
+        with self._login() as session:
             for _, row in names.iterrows():
 
                 form_action_url = self.url_person_search_action
@@ -716,8 +746,9 @@ class BVVScalper:
                     logging.error(f"BVV_SCALPER: response failed for fetching user_id with {form_data['name']}, {form_data['vorname']}")
                     continue
 
-                response.encoding = self.__ENCODING
+                response.encoding = self._ENCODING
                 id_contents.append(response.text)
+            self._logout(session)
 
         for id_content in id_contents:
             soup = BeautifulSoup(id_content, 'html.parser')
