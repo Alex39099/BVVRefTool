@@ -386,10 +386,12 @@ def trigger_ref_search(config, person_container: PersonContainer):
 
 
 def disable(program_path, config, containers):
+    report = ManagementReport.instance().get_html_message()
+    Mailer.instance().send_management_report(report)
+    if report is None:
+        report = "EMPTY REPORT"
     with open(os.path.join(program_path, "last_management_report.txt"), "w", encoding="utf-8") as f:
-        f.write(ManagementReport.instance().get_html_message())
-
-    Mailer.instance().send_management_report()
+        f.write(report)
 
     # save data from all containers
     for container in containers:
