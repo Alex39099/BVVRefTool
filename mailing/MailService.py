@@ -81,8 +81,7 @@ class Mailer:
             smtp.sendmail(self.smtp_username, mail_to, msg_str)
         return
 
-    def send_management_report(self):
-        html_report = ManagementReport.instance().get_html_message()
+    def send_management_report(self, html_report):
         if html_report is None:
             logging.info("Management report has no content. Skipping mailing...")
             return
