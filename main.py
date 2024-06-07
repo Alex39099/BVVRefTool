@@ -38,7 +38,7 @@ def get_big_registrations_df(registration_container: RegistrationContainer, cour
     :param course_container: courses_container
     :param person_container: persons_container
     :param bvv_scalper: BVVScalper
-    :return: big registrations_df with columns of registrations_df, courses_df with prefix courses_ and persons_df with prefix persons_. In addition, column 'club_membership_status'
+    :return: big registrations_df with columns of registrations_df, courses_df with prefix courses_ and persons_df with prefix persons_. In addition, column 'club_member_status'
     """
     registrations_df = registration_container.data
 
