@@ -241,9 +241,11 @@ def manage_new_courses(config, new_courses: pd.DataFrame, person_container: Pers
         if len(trainings) > 0:
             candidates = person_container.get_persons_by_license(license_category="Halle", license_type=license_type,
                                                                  wants_higher_license=True)
+            # ignore wants_higher_license if no one wants it.
             if len(candidates) == 0:
-                candidates = person_container.get_persons_by_license(license_category="Halle", license_type="D")
-                candidates = candidates.sort_values("wants_higher_license", ascending=False)
+                candidates = person_container.get_persons_by_license(license_category="Halle", license_type=license_type)
+
+            candidates = candidates.sort_values("wants_higher_license", ascending=False)
             report.add_new_courses(trainings, candidates)
 
     # trainings CT and CP
