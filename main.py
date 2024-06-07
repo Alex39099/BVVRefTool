@@ -281,7 +281,9 @@ def manage_pending_courses(config: Config, registration_container: RegistrationC
     big_registrations_df = get_big_registrations_df(registration_container, course_container, person_container, bvv_scalper)
 
     # only work on registrations with pending course and pending participation status
-    pending_course_registrations = big_registrations_df[(big_registrations_df["course_date_start"] >= datetime.now()) & (big_registrations_df["participation_status"] == "pending")].copy()
+    pending_course_registrations = big_registrations_df[(big_registrations_df["course_date_start"] >= datetime.now())
+                                                        & (big_registrations_df["registration_status"] != "cancelled")
+                                                        & (big_registrations_df["participation_status"] == "pending")].copy()
 
     for course_id in pending_course_registrations["course_id"].unique():
         course_select = course_container.data[course_container.data["id"] == course_id]
