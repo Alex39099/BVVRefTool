@@ -195,4 +195,5 @@ class DataContainer:
 
         # prevent strings "nan"
         df = df.replace("nan", np.nan)
+        df = df.replace("", np.nan)
         return df

@@ -97,7 +97,7 @@ class CourseContainer(DataContainer):
         # select any row with no deep data at all (to prevent constant updating when not every deep data is filled by BVV)
         selected_courses_na = selected_courses[selected_courses.isna().sum(axis=1) >= self._DEEP_DATA_COUNT]
 
-        if len(selected_courses_na) > 1:
+        if len(selected_courses_na) > 0:
             lids = selected_courses_na["id"].tolist()
             res = self.update(self.scalper.get_deep_course_info(lids))
             logging.info(f"updated deep data for course_ids {lids}")
