@@ -26,7 +26,6 @@ from mailing.MailService import Mailer
 from mailing.MessageCreator import ManagementReport
 
 
-
 def trigger_club_potential_refs(config: Config, person_container: PersonContainer, potential_refs):
     if config.get(["club_potential_refs_settings", "remove_existing_potential_refs"]):
         person_df = person_container.data
