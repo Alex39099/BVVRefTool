@@ -130,7 +130,10 @@ class Mailer:
     def send_course_confirmation_request(self, big_registrations_df):
         self._send_mail_from_template("course_ask_confirmation", big_registrations_df)
 
-    def send_course_confirmed(self, big_registrations_df):
+    def send_course_confirmed(self, big_registrations_df, refresher_online=False):
+        if refresher_online:
+            self._send_mail_from_template("course_confirmed_refresher_online", big_registrations_df)
+            return
         self._send_mail_from_template("course_confirmed", big_registrations_df)
 
     def send_course_reminder(self, big_registrations_df, course_type):

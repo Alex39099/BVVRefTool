@@ -87,6 +87,6 @@ def trigger_ref_search(config: Config, person_container: PersonContainer):
 
 def trigger_refresher_pending(config: Config, course_container: CourseContainer, person_container: PersonContainer):
     courses = course_container.data
-    courses = courses[courses["district"].isin(config.get(["general", "districts"])) & (courses["type"] == "refresher") & (courses["license_type"] == "Halle") & (courses["date_end"] > datetime.now())]
+    courses = courses[courses["district"].isin(config.get(["general", "districts"])) & (courses["type"] == "refresher") & (courses["license_category"] == "Halle") & (courses["date_end"] > datetime.now())]
     manage_new_courses(config, courses, person_container)
     return
