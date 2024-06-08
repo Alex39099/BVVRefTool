@@ -175,11 +175,11 @@ def manage_changed_registrations(registration_container: RegistrationContainer, 
     pending = changed_club_registrations[changed_club_registrations["registration_status"].isin(["waiting", "approved"]) & (changed_club_registrations["participation_status"] == "pending")]
 
     # treat online refresher differently
-    pending_refresher_online = pending[(pending["course_type"] == "refresher") & (pending["city"] == "Online")]
+    pending_refresher_online = pending[(pending["course_type"] == "refresher") & (pending["course_city"] == "Online")]
     mailer.send_course_confirmed(pending_refresher_online, refresher_online=True)
     management_report.add_general_info(f"{len(pending_refresher_online)} people received online refresher mails.")
 
-    pending = pending[(pending["course_type"] != "refresher") | (pending["city"] != "Online")]
+    pending = pending[(pending["course_type"] != "refresher") | (pending["course_city"] != "Online")]
 
     # confirmation denied
     pending_confirmation_denied = pending[pending["confirmation_status"] == "denied"]
