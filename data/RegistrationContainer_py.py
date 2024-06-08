@@ -77,7 +77,7 @@ class RegistrationContainer(DataContainer):
         self.data.loc[~self.data["confirmation_status"].isin(["confirmed", "denied", "pending"]), "confirmation_status"] = "pending"
 
         # sort data
-        self.data = self.data.sort_values(by=["course_id", "course_label", "registration_status", "waiting_position", "last_name", "first_name"])
+        self.data = self.data.sort_values(by=["course_id", "course_label", "registration_status", "participation_status", "waiting_position", "last_name", "first_name"])
         return super().save()
 
     def insert_course_id(self, courses):

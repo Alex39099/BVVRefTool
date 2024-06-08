@@ -84,6 +84,10 @@ class CourseContainer(DataContainer):
         super().__init__(config, scalper)
         return
 
+    def save(self):
+        self.data = self.data.sort_values(by=["district", "type", "license_category", "license_type", "registration_end"], ascending=[True, True, True, True, True])
+        return super().save()
+
     def assert_deep_data(self, lids: Union[list[str], str]):
         if isinstance(lids, str):
             lids = [lids]
