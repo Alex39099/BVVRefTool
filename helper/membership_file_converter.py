@@ -17,6 +17,7 @@ import logging
 
 import pandas as pd
 
+
 def read_club_membership_file(filepath, date_format, name_converter):
     """
     Reads the club_membership_file at the given path.
