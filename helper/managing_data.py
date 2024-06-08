@@ -327,6 +327,6 @@ def manage_pending_courses(config: Config, registration_container: RegistrationC
                     management_report.add_general_info(f"reminder mails were sent for course {course_select['label'].iloc[0]} ({course_select['city'].iloc[0]}) to {len(registrations_select_players)} players.")
 
                     # send reminder mails to all participation pending players
-                    mailer.send_course_reminder(registrations_select_players, registrations_select_players["course_type"].iloc[0])
+                    mailer.send_course_reminder(registrations_select_players, registrations_select_players["course_type"].iloc[0], course_online=(registrations_select_players["course_city"].iloc[0] == "Online"))
 
     return

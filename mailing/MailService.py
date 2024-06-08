@@ -136,7 +136,9 @@ class Mailer:
             return
         self._send_mail_from_template("course_confirmed", big_registrations_df)
 
-    def send_course_reminder(self, big_registrations_df, course_type):
+    def send_course_reminder(self, big_registrations_df, course_type, course_online=False):
+        if course_online:
+            course_type = f"{course_type}_online"
         self._send_mail_from_template(f"course_reminder_{course_type}", big_registrations_df)
 
     def send_ref_request(self, recipients_df):
