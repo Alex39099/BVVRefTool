@@ -177,7 +177,8 @@ def manage_changed_registrations(registration_container: RegistrationContainer, 
     # treat online refresher differently
     pending_refresher_online = pending[(pending["course_type"] == "refresher") & (pending["course_city"] == "Online")]
     mailer.send_course_confirmed(pending_refresher_online, refresher_online=True)
-    management_report.add_general_info(f"{len(pending_refresher_online)} people received online refresher mails.")
+    if len(pending_refresher_online) > 0:
+        management_report.add_general_info(f"{len(pending_refresher_online)} people received online refresher mails.")
 
     pending = pending[(pending["course_type"] != "refresher") | (pending["course_city"] != "Online")]
 
