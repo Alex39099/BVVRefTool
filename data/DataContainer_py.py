@@ -194,6 +194,7 @@ class DataContainer:
                 df[column] = df[column].astype(dtype)
 
         # prevent strings "nan"
-        df = df.replace("nan", np.nan)
-        df = df.replace("", np.nan)
+        with pd.option_context('future.no_silent_downcasting', True):
+            df = df.replace("nan", np.nan)
+            df = df.replace("", np.nan)
         return df
