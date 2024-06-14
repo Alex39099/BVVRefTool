@@ -189,7 +189,7 @@ class DataContainer:
             elif dtype == int or dtype == float:
                 df[column] = pd.to_numeric(df[column], errors="coerce")
             elif dtype == bool:
-                df[column] = df[column].apply(lambda x: True if x in ["True", "true"] else False).astype(bool)
+                df[column] = df[column].apply(lambda x: True if x in [True, "True", "true"] else False).astype(bool)
             else:
                 df[column] = df[column].astype(dtype)
 
