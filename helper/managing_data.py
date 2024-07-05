@@ -84,7 +84,7 @@ def manage_changed_registrations(registration_container: RegistrationContainer, 
     registrations_to_be_cancelled = registrations_df[(~registrations_df["person_club_member_status"])
                                                      & (registrations_df["registration_status"] != "cancelled")
                                                      & (registrations_df["participation_status"] == "pending")
-                                                     & (registrations_df["course_deregistration_end"] <= datetime.now())]
+                                                     & (registrations_df["course_deregistration_end"] > datetime.now())]
     columns_of_interest_report = ["course_label", "course_deregistration_end", "last_name", "first_name", "birthday", "person_club_member_status"]
     registrations_to_be_cancelled = registrations_to_be_cancelled[columns_of_interest_report]
     registrations_to_be_cancelled = registrations_to_be_cancelled.sort_values(columns_of_interest_report)
