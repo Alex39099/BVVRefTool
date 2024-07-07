@@ -85,10 +85,10 @@ def manage_changed_registrations(registration_container: RegistrationContainer, 
                                                      & (registrations_df["registration_status"] != "cancelled")
                                                      & (registrations_df["participation_status"] == "pending")
                                                      & (registrations_df["course_deregistration_end"] > datetime.now())]
-    columns_of_interest_report = ["course_label", "course_deregistration_end", "last_name", "first_name", "birthday", "person_club_member_status"]
+    columns_of_interest_report = ["course_label", "course_deregistration_end", "last_name", "first_name", "birthday", "person_club_member_status", "person_club_membership_expire"]
     registrations_to_be_cancelled = registrations_to_be_cancelled[columns_of_interest_report]
     registrations_to_be_cancelled = registrations_to_be_cancelled.sort_values(columns_of_interest_report)
-    registrations_to_be_cancelled = registrations_to_be_cancelled.rename(columns={"person_club_member_status": "club_member"})
+    registrations_to_be_cancelled = registrations_to_be_cancelled.rename(columns={"person_club_member_status": "club_member", "person_club_membership_expire": "club_membership_expire"})
     management_report.add_registrations(registrations_to_be_cancelled, ReportReason.NOT_IN_CLUB)
 
     # send cancellation mail to any removed registration, treat them as cancelled for mailing
