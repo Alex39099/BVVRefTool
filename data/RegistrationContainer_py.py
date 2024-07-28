@@ -16,13 +16,11 @@
 import logging
 from datetime import datetime
 
-import numpy as np
 import pandas as pd
 
 from data.BVVScalper_py import BVVScalper
 from data.Config import Config
 from data.DataContainer_py import DataContainer
-from data.helpfunctions import replace_umlaute
 
 
 class RegistrationContainer(DataContainer):
@@ -68,7 +66,6 @@ class RegistrationContainer(DataContainer):
 
     def __init__(self, config: Config, scalper: BVVScalper):
         super().__init__(config, scalper)
-        self.last_update_return = None
         return
 
     def save(self):
