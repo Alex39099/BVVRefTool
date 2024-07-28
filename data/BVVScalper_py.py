@@ -130,6 +130,7 @@ class BVVScalper:
         # transform values of participation_status
         participation_mapping = {
             'erfolgreich teilgenommen': 'passed',
+            'teilgenommen': 'passed',
             'nicht erfolgreich teilgenommen': 'failed',
             'nicht teilgenommen': 'missed',
             'unbekannt': 'pending'
