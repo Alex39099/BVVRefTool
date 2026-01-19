@@ -1,4 +1,4 @@
-#  Copyright (c) 2024. Alexander Schmid
+#  Copyright (c) 2024-2026. Alexander Schmid
 #
 #      This program is free software: you can redistribute it and/or modify
 #      it under the terms of the GNU General Public License as published by
@@ -12,132 +12,78 @@
 #
 #      You should have received a copy of the GNU General Public License
 #      along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
 import logging
 import os
 import sys
 import warnings
 
-from data.BVVScalper_py import BVVScalper
-from data.Config import Config
-from data.CourseContainer_py import CourseContainer
-from data.PersonContainer_py import PersonContainer
-from data.RegistrationContainer_py import RegistrationContainer
-from helper.membership_file_converter import read_club_membership_file
-from mailing.MailService import Mailer
-from mailing.MessageCreator import ManagementReport
-from helper.managing_data import manage_changed_registrations, manage_pending_courses, manage_new_courses
-from helper.managing_trigger import trigger_club_potential_refs, trigger_ref_search, trigger_refresher_pending
+from manager.BVVTools import BVVScraper, parse_courses_from_html, normalize_course
+from manager.DiffLayer import DiffLayer, ChangeEventType
+from manager.Storage import SnapshotRepository, SnapshotSource
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
-def disable(program_path, config, containers):
-    report = ManagementReport.instance().get_html_message()
-    Mailer.instance().send_management_report(report)
-    if report is None:
-        report = "EMPTY REPORT"
-    with open(os.path.join(program_path, "last_management_report.txt"), "w", encoding="utf-8") as f:
-        f.write(report)
+def scrape_and_save_data(credentials: tuple[str, str], db_path: str):
+    scraper = BVVScraper(credentials)
+    snapshot_rep = SnapshotRepository(db_path)
 
-    # save data from all containers
-    for container in containers.values():
-        container.save()
+    run_id = snapshot_rep.create_run()
+    scraped_data = {}
 
-    # save config
-    with open(os.path.join(program_path, "config.json"), "w", encoding="utf-8") as f:
-        config.save(f, ensure_ascii=False)
+    # scrape data at once so we only have one login
+    with scraper.get_session() as session:
+        scraped_data[SnapshotSource.BVV_COURSES] = scraper.scrape_courses(session)
+        scraped_data[SnapshotSource.BVV_REGISTRATIONS] = scraper.scrape_registrations(session)
+        scraped_data[SnapshotSource.BVV_LICENSES_EXCEL] = scraper.scrape_licenses_excel(session)
+    logger.info(f"all data was scraped for run_id {run_id}")
 
-    sys.exit()
+    # save data in repo
+    for k, v in scraped_data:
+        snapshot_rep.save_snapshot(run_id, source=k, raw_data=v)
+        logger.info(f"saved snapshot: run_id = {run_id}, {k}")
+    logger.info(f"all data was saved for run_id = {run_id}")
+
+    return scraped_data
 
 
-# TODO features:
-#   - priority sorting, how do we determine priority?
-#   - for players below a certain age send mail also to trainer
-#   - low_team_licenses_warning for trainer
-#   - go live
+def send_new_course_notification(db_path):
+    snapshot_repo = SnapshotRepository(db_path)
+    recent_course_snapshots = snapshot_repo.get_recent_snapshots(source=SnapshotSource.BVV_COURSES, limit=2)
+    parsed_courses = [parse_courses_from_html(snapshot.raw_data) for snapshot in recent_course_snapshots]
+    normalized_courses = [[normalize_course(parsed_course) for parsed_course in parsed_courses[i]]
+                          for i in range(len(parsed_courses))]
+
+    if len(normalized_courses) == 0:
+        raise ValueError("no data available, fetch data first")
+
+    latest_courses = normalized_courses[0]
+    previous_courses = []
+    if len(normalized_courses) > 1:
+        previous_courses = normalized_courses[1]
+
+    diff_layer = DiffLayer(key_func=lambda c: c.id)
+    events = diff_layer.diff(previous_courses, latest_courses)
+
+    added_courses = [e.after for e in events if e.type == ChangeEventType.ADDED]
+    if len(added_courses) == 0:
+        return False  # no new courses
+
+    # TODO send mail to management
+
+
 
 def main(program_path):
     logging.basicConfig(filename=os.path.join(program_path, "recent.log"), encoding="utf-8", level=logging.DEBUG)
-    # suppress UserWarning from openpyxl
-    warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
-    with open(os.path.join(program_path, "config.json"), encoding="utf-8") as f:
-        config = Config.load(f)
+    credentials = ('bvv_username', 'bvv_password')  # TODO
+    db_path = "ref_management_db.sql"
 
-    bvv_scalper = BVVScalper(config)
-    Mailer.instance(config)
+    scrape_and_save_data(credentials, db_path)
+    send_new_course_notification(db_path)
 
-    management_report = ManagementReport.instance()
 
-    course_container = CourseContainer(config, bvv_scalper)
-    person_container = PersonContainer(config, bvv_scalper)
-    registration_container = RegistrationContainer(config, bvv_scalper)
-
-    containers = {
-        "course": course_container,
-        "person": person_container,
-        "registration": registration_container
-    }
-
-    # load data from all containers
-    for container in containers.values():
-        container.load()
-
-    # update data
-    new_courses = course_container.update()
-    person_container.update()
-    registration_container.update()
-
-    # insert course_id into registrations, assert deep course data
-    registration_container.insert_course_id(course_container.data)
-    course_container.assert_deep_data(list(registration_container.data["course_id"]))
-
-    # read club_members
-    settings_config_path = ["club_membership_file_settings"]
-    club_members = read_club_membership_file(filepath=config.get(settings_config_path + ["file_path"]),
-                                             name_converter=config.get(
-                                                 settings_config_path + ["name_converter_local_to_bvv"]),
-                                             date_format=config.get(settings_config_path + ["date_format"]))
-
-    trigger_config_path = ["trigger", "club_potential_refs_update"]
-    if config.get(trigger_config_path):
-        logging.info(f"Trigger {trigger_config_path[1]} is active.")
-        config.set(trigger_config_path, False)
-        potential_refs = club_members.copy()
-        trigger_club_potential_refs(config, person_container, potential_refs)
-
-    trigger_config_path = ["trigger", "club_membership_update"]
-    if config.get(trigger_config_path):
-        logging.info(f"Trigger {trigger_config_path[1]} is active.")
-        config.set(trigger_config_path, False)
-        person_container.update_membership(
-            club_members[["last_name", "first_name", "birthday", "club_membership_expire"]])
-        logging.info("updated club_membership_expire")
-        management_report.add_general_info("club_membership_expire has been updated.")
-
-    trigger_config_path = ["trigger", "only_update_data"]
-    if config.get(trigger_config_path):
-        logging.info(f"Trigger {trigger_config_path[1]} is active.")
-        config.set(trigger_config_path, False)
-        management_report.add_general_info("only updated data, did not send mails.")
-        disable(program_path, config, containers)
-
-    trigger_config_path = ["trigger", "ref_search"]
-    if config.get(trigger_config_path):
-        logging.info(f"Trigger {trigger_config_path[1]} is active.")
-        config.set(trigger_config_path, False)
-        trigger_ref_search(config, person_container)
-
-    trigger_config_path = ["trigger", "refresher_pending_in_report"]
-    if config.get(trigger_config_path):
-        logging.info(f"Trigger {trigger_config_path[1]} is active.")
-        config.set(trigger_config_path, False)
-        trigger_refresher_pending(config, course_container, person_container)
-
-    manage_changed_registrations(registration_container, course_container, person_container, bvv_scalper)
-    manage_new_courses(config, new_courses, person_container)
-    manage_pending_courses(config, registration_container, course_container, person_container, bvv_scalper)
-
-    disable(program_path, config, containers)
 
 
 if __name__ == "__main__":
