@@ -12,11 +12,15 @@
 #
 #      You should have received a copy of the GNU General Public License
 #      along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import email
+import imaplib
+import json
 import logging
 import os
 import sys
 import warnings
 
+from helper.Mailing import SMTPSettings, MailConstructor, Mailer
 from manager.BVVTools import BVVScraper, parse_courses_from_html, normalize_course
 from manager.DiffLayer import DiffLayer, ChangeEventType
 from manager.Storage import SnapshotRepository, SnapshotSource
@@ -48,7 +52,7 @@ def scrape_and_save_data(credentials: tuple[str, str], db_path: str):
     return scraped_data
 
 
-def send_new_course_notification(db_path):
+def send_new_course_notification(db_path: str, smtp_settings: SMTPSettings):
     snapshot_repo = SnapshotRepository(db_path)
     recent_course_snapshots = snapshot_repo.get_recent_snapshots(source=SnapshotSource.BVV_COURSES, limit=2)
     parsed_courses = [parse_courses_from_html(snapshot.raw_data) for snapshot in recent_course_snapshots]
@@ -67,23 +71,44 @@ def send_new_course_notification(db_path):
     events = diff_layer.diff(previous_courses, latest_courses)
 
     added_courses = [e.after for e in events if e.type == ChangeEventType.ADDED]
-    if len(added_courses) == 0:
+
+    # filter only for relevant districts
+    courses_of_interest = [course for course in added_courses if course.district in ['BVV', 'BVV/Sch']]
+
+    if len(courses_of_interest) == 0:
         return False  # no new courses
 
-    # TODO send mail to management
-
+    mailer = Mailer(smtp_settings)
+    for course in courses_of_interest:
+        mail_constructor = MailConstructor(
+            from_mail=("SR Management", smtp_settings.username),
+            to_mail=(None, smtp_settings.username),
+            subject=f"Neuer SR Kurs: {course.label}"
+        )
+        mail_constructor.plain_text = str(course)
+        mailer.send_mail(mail_constructor.get_mail())
 
 
 def main(program_path):
     logging.basicConfig(filename=os.path.join(program_path, "recent.log"), encoding="utf-8", level=logging.DEBUG)
-
-    credentials = ('bvv_username', 'bvv_password')  # TODO
     db_path = "ref_management_db.sql"
 
-    scrape_and_save_data(credentials, db_path)
-    send_new_course_notification(db_path)
+    with open("config.json", "r") as f:
+        config = json.load(f)
 
+    bvv_credentials = config['bvv_credentials']
+    bvv_username = bvv_credentials['username']
+    bvv_password = bvv_credentials['password']
+    scrape_and_save_data((bvv_username, bvv_password), db_path)
 
+    mail_credentials = config['mail_credentials']
+    smtp_settings = SMTPSettings(
+        host=mail_credentials['smtp_host'],
+        port=mail_credentials['smtp_port'],
+        username=mail_credentials['smtp_username'],
+        password=mail_credentials['smtp_password']
+    )
+    send_new_course_notification(db_path, smtp_settings)
 
 
 if __name__ == "__main__":

@@ -50,7 +50,7 @@ class Attachment:
 
 @dataclass
 class MailConstructor:
-    from_mail: str
+    from_mail: tuple[str | None, str]
     subject: str
 
     to_mail: InitVar[tuple[str | None, str] | None] = None
