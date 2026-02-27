@@ -44,7 +44,7 @@ def scrape_and_save_data(credentials: tuple[str, str], db_path: str):
     logger.info(f"all data was scraped for run_id {run_id}")
 
     # save data in repo
-    for k, v in scraped_data:
+    for k, v in scraped_data.items():
         snapshot_rep.save_snapshot(run_id, source=k, raw_data=v)
         logger.info(f"saved snapshot: run_id = {run_id}, {k}")
     logger.info(f"all data was saved for run_id = {run_id}")
@@ -83,7 +83,7 @@ def send_new_course_notification(db_path: str, smtp_settings: SMTPSettings):
         mail_constructor = MailConstructor(
             from_mail=("SR Management", smtp_settings.username),
             to_mail=(None, smtp_settings.username),
-            subject=f"Neuer SR Kurs: {course.label}"
+            subject=f"Neuer SR Kurs: {course.label} ({course.city})"
         )
         mail_constructor.plain_text = str(course)
         mailer.send_mail(mail_constructor.get_mail())

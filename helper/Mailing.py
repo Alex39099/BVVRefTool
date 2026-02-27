@@ -83,7 +83,7 @@ class MailConstructor:
         if self.html_text:
             msg.add_alternative(self.html_text, subtype='html')
 
-        msg['From'] = self.from_mail
+        msg['From'] = formataddr(self.from_mail)
         msg['Subject'] = self.subject
         msg['To'] = self._get_addresses(self.to_mails)
         if self.cc_mails:
