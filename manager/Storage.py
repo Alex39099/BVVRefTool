@@ -91,7 +91,7 @@ class SnapshotRepository:
 
     def delete_runs_older_than(self, cutoff: datetime) -> int:
         """
-        Deletes all runs and the respective snapshots older than cutoff.
+        Deletes all runs and the associated snapshots older than cutoff.
         :param cutoff: datetime object
         :return: number of runs deleted
         """
@@ -103,6 +103,7 @@ class SnapshotRepository:
             "DELETE FROM scraper_runs WHERE collected_at < ?",
             (cutoff_str,)
         )
+        # Snapshots are removed automatically via ON DELETE CASCADE
         deleted = c.rowcount
         conn.commit()
         conn.close()
