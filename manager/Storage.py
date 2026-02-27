@@ -31,8 +31,13 @@ class SnapshotRepository:
         self.db_path = db_path
         self._init_db()
 
-    def _init_db(self):
+    def _get_connection(self):
         conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA foreign_keys = ON")  # enforce foreign key constraints, i.e. run_id must be present
+        return conn
+
+    def _init_db(self):
+        conn = self._get_connection()
         c = conn.cursor()
 
         # Scraper runs
@@ -51,7 +56,7 @@ class SnapshotRepository:
             run_id INTEGER NOT NULL,
             source TEXT NOT NULL,
             raw_data BLOB NOT NULL,
-            FOREIGN KEY(run_id) REFERENCES scraper_runs(run_id),
+            FOREIGN KEY(run_id) REFERENCES scraper_runs(run_id) ON DELETE CASCADE,
             UNIQUE (run_id, source)
         )
         """)
@@ -59,7 +64,7 @@ class SnapshotRepository:
         conn.close()
 
     def create_run(self, status: ScraperRunningStatus = ScraperRunningStatus.RUNNING) -> int:
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         c = conn.cursor()
         run_id = c.execute(
             "INSERT INTO scraper_runs (status) VALUES (?)",
@@ -69,8 +74,42 @@ class SnapshotRepository:
         conn.close()
         return run_id
 
+    def delete_run(self, run_id: int) -> None:
+        """
+        Deletes a scraper run and all associated snapshots.
+        :param run_id: scraper run id
+        """
+        conn = self._get_connection()
+        c = conn.cursor()
+        c.execute(
+            "DELETE FROM scraper_runs WHERE run_id=?",
+            (run_id,)
+        )
+        # Snapshots are removed automatically via ON DELETE CASCADE
+        conn.commit()
+        conn.close()
+
+    def delete_runs_older_than(self, cutoff: datetime) -> int:
+        """
+        Deletes all runs and the respective snapshots older than cutoff.
+        :param cutoff: datetime object
+        :return: number of runs deleted
+        """
+        conn = self._get_connection()
+        c = conn.cursor()
+
+        cutoff_str = cutoff.isoformat(sep=" ")
+        c.execute(
+            "DELETE FROM scraper_runs WHERE collected_at < ?",
+            (cutoff_str,)
+        )
+        deleted = c.rowcount
+        conn.commit()
+        conn.close()
+        return deleted
+
     def update_run_status(self, run_id: int, status: ScraperRunningStatus):
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         c = conn.cursor()
         c.execute(
             "UPDATE scraper_runs SET status=? WHERE run_id=?",
@@ -88,7 +127,7 @@ class SnapshotRepository:
         :param raw_data: raw_data of the scrape operation, e.g. response content
         :return: snapshot_id
         """
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         c = conn.cursor()
         try:
             snapshot_id = c.execute(
@@ -112,7 +151,7 @@ class SnapshotRepository:
         if limit <= 0:
             raise ValueError("limit must be positive")
 
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_connection()
         c = conn.cursor()
         rows = c.execute(
             f"""
