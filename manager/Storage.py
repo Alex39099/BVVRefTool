@@ -63,16 +63,27 @@ class SnapshotRepository:
         conn.commit()
         conn.close()
 
-    def create_run(self, status: ScraperRunningStatus = ScraperRunningStatus.RUNNING) -> int:
+    def create_run(self, status: ScraperRunningStatus = ScraperRunningStatus.RUNNING) -> (int, datetime):
+        """
+        Creates a scraper run
+        :param status: the status of the scraper run, defaults to RUNNING
+        :return: run_id, collected_at
+        """
         conn = self._get_connection()
         c = conn.cursor()
         run_id = c.execute(
             "INSERT INTO scraper_runs (status) VALUES (?)",
             (status.value,)
         ).lastrowid
+        c.execute(
+            "SELECT collected_at FROM scraper_runs WHERE run_id = ?",
+            (run_id,)
+        )
+        collected_at_str = c.fetchone()[0]
         conn.commit()
         conn.close()
-        return run_id
+        collected_at = datetime.fromisoformat(collected_at_str)
+        return run_id, collected_at
 
     def delete_run(self, run_id: int) -> None:
         """

@@ -12,44 +12,49 @@
 #
 #      You should have received a copy of the GNU General Public License
 #      along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import email
-import imaplib
+
 import json
 import logging
 import os
 import sys
-import warnings
+from datetime import datetime
 
 from helper.Mailing import SMTPSettings, MailConstructor, Mailer
 from manager.BVVTools import BVVScraper, parse_courses_from_html, normalize_course
 from manager.DiffLayer import DiffLayer, ChangeEventType
-from manager.Storage import SnapshotRepository, SnapshotSource
+from manager.Storage import SnapshotRepository, SnapshotSource, ScraperRunningStatus
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def scrape_and_save_data(credentials: tuple[str, str], db_path: str):
+def scrape_and_save_data(credentials: tuple[str, str], db_path: str) -> (int, datetime):
     scraper = BVVScraper(credentials)
     snapshot_rep = SnapshotRepository(db_path)
 
-    run_id = snapshot_rep.create_run()
+    run_id, collected_at = snapshot_rep.create_run()
     scraped_data = {}
 
     # scrape data at once so we only have one login
-    with scraper.get_session() as session:
-        scraped_data[SnapshotSource.BVV_COURSES] = scraper.scrape_courses(session)
-        scraped_data[SnapshotSource.BVV_REGISTRATIONS] = scraper.scrape_registrations(session)
-        scraped_data[SnapshotSource.BVV_LICENSES_EXCEL] = scraper.scrape_licenses_excel(session)
-    logger.info(f"all data was scraped for run_id {run_id}")
+    try:
+        with scraper.get_session() as session:
+            scraped_data[SnapshotSource.BVV_COURSES] = scraper.scrape_courses(session)
+            scraped_data[SnapshotSource.BVV_REGISTRATIONS] = scraper.scrape_registrations(session)
+            scraped_data[SnapshotSource.BVV_LICENSES_EXCEL] = scraper.scrape_licenses_excel(session)
+        logger.info(f"all data was scraped for run_id {run_id}")
+    except Exception as e:
+        logger.error(f"Failed to scrape data for run_id {run_id} because {e}")
+        snapshot_rep.update_run_status(run_id, ScraperRunningStatus.FAILED)
+        logger.exception(e)
+        raise e
 
     # save data in repo
     for k, v in scraped_data.items():
         snapshot_rep.save_snapshot(run_id, source=k, raw_data=v)
         logger.info(f"saved snapshot: run_id = {run_id}, {k}")
-    logger.info(f"all data was saved for run_id = {run_id}")
-
-    return scraped_data
+    snapshot_rep.update_run_status(run_id, ScraperRunningStatus.SUCCESS)
+    logger.info(f"all data was saved for run_id = {run_id}. Status = {ScraperRunningStatus.SUCCESS}")
+    return run_id, collected_at
 
 
 def send_new_course_notification(db_path: str, smtp_settings: SMTPSettings):
@@ -99,7 +104,7 @@ def main(program_path):
     bvv_credentials = config['bvv_credentials']
     bvv_username = bvv_credentials['username']
     bvv_password = bvv_credentials['password']
-    scrape_and_save_data((bvv_username, bvv_password), db_path)
+    run_id, collected_at = scrape_and_save_data((bvv_username, bvv_password), db_path)
 
     mail_credentials = config['mail_credentials']
     smtp_settings = SMTPSettings(
@@ -109,6 +114,10 @@ def main(program_path):
         password=mail_credentials['smtp_password']
     )
     send_new_course_notification(db_path, smtp_settings)
+
+    # only keep latest snapshots from current run_id
+    snapshot_rep = SnapshotRepository(db_path)
+    snapshot_rep.delete_runs_older_than(collected_at)
 
 
 if __name__ == "__main__":
