@@ -12,6 +12,8 @@ from urllib.parse import urlparse, parse_qs
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3 import Retry
 
 from manager.Data import RefLicenseCategory, Course, RefLicenseType, Registration, RegistrationStatus, \
     ParticipationStatus, CourseType, RefLicense, PersonIdentity, Referee, Participant, GrantableLicenseCategory, \
@@ -28,17 +30,47 @@ class BVVSession(requests.Session):
         self.min_throttle = min_throttle  # seconds
         self._last_request_time = None
 
+        # Retry configuration
+        retry = Retry(
+            total=5,
+            connect=5,
+            read=5,
+            backoff_factor=1,
+            allowed_methods=["GET", "POST"],
+            status_forcelist=[500, 502, 503, 504],
+        )
+
+        adapter = HTTPAdapter(max_retries=retry)
+        self.mount("https://", adapter)
+        self.mount("http://", adapter)
+
+        # Disable connection reuse
+        self.headers.update({"Connection": "close"})
+
     def request(self, method, url, **kwargs):
-        # wait if the previous request was too recent
+        # enforce timeout
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = 15
+
+        # throttling
         if self._last_request_time is not None:
             elapsed = time.time() - self._last_request_time
             wait = self.min_throttle - elapsed
             if wait > 0:
-                logging.debug(f"BVV_SESSION: delaying next request by {wait} seconds...")
+                logging.debug(f"BVV_SESSION: delaying next request by {wait:.2f} seconds...")
                 time.sleep(wait)
 
-        response = super().request(method, url, **kwargs)
+        try:
+            response = super().request(method, url, **kwargs)
+        except requests.exceptions.ConnectionError:
+            logging.warning("BVV_SESSION: connection error, retry handled by adapter")
+            raise
+
         self._last_request_time = time.time()
+
+        # detect silent session expiry
+        if response.status_code != 200 or "core_login" in response.url.lower():
+            raise RuntimeError("Session expired or invalid response")
         return response
 
     def __enter__(self):
@@ -48,6 +80,10 @@ class BVVSession(requests.Session):
         if response.status_code != 200:
             logging.error("BVV_SCALPER: login failed")
             raise RuntimeError("Login failed")
+
+        if "core_login" in response.url.lower():
+            raise RuntimeError("Login rejected (still on login page)")
+
         logging.info("BVV_SCALPER: logged in")
         return self
 
