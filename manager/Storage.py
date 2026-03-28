@@ -93,10 +93,13 @@ class SnapshotRepository:
         conn = self._get_connection()
         c = conn.cursor()
         c.execute(
-            "DELETE FROM scraper_runs WHERE run_id=?",
+            "DELETE FROM snapshots WHERE run_id = ?",
             (run_id,)
         )
-        # Snapshots are removed automatically via ON DELETE CASCADE
+        c.execute(
+            "DELETE FROM scraper_runs WHERE run_id = ?",
+            (run_id,)
+        )
         conn.commit()
         conn.close()
 
@@ -109,12 +112,22 @@ class SnapshotRepository:
         conn = self._get_connection()
         c = conn.cursor()
 
-        cutoff_str = cutoff.isoformat(sep=" ")
+        cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+        # delete snapshots
+        c.execute(
+            """
+            DELETE FROM snapshots
+            WHERE run_id IN (
+                SELECT run_id FROM scraper_runs WHERE collected_at < ?
+            )
+            """,
+            (cutoff_str,)
+        )
+        # delete scraper run
         c.execute(
             "DELETE FROM scraper_runs WHERE collected_at < ?",
             (cutoff_str,)
         )
-        # Snapshots are removed automatically via ON DELETE CASCADE
         deleted = c.rowcount
         conn.commit()
         conn.close()
