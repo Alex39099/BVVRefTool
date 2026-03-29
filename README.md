@@ -5,6 +5,12 @@ A Tool to manage Registrations and Deregistrations to VB-Ref Courses on https://
 
 BVVRefTool is a tool wrote in Python designed to ease the life of a referee management from a club. It aims to provide not only tools for managing registrations but also things like a search for refs within the club.
 
+Currently, it only works as a notification system via email for new courses.
+
+Installation
+------------
+Configure the config.example.json to your personal configurations/credentials and rename the file to config.json. You can optionally relocate the file and run the script using `python main.py directory-path`
+
 
 Information
 ------------
