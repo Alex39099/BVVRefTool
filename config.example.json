@@ -1,0 +1,19 @@
+{
+    "general": {
+        "districts": [
+            "BVV/Sch",
+            "BVV"
+        ]
+    },
+    "bvv_credentials": {
+        "username": "CHANGE_TO_YOUR_SETTINGS",
+        "password": "CHANGE_TO_YOUR_SETTINGS",
+        "club_id": "CHANGE_TO_YOUR_SETTINGS"
+    },
+    "mail_credentials": {
+        "smtp_host": "CHANGE_TO_YOUR_SETTINGS",
+        "smtp_port": 25,
+        "smtp_username": "CHANGE_TO_YOUR_SETTINGS",
+        "smtp_password": "CHANGE_TO_YOUR_SETTINGS"
+    }
+}
