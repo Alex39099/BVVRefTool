@@ -100,7 +100,8 @@ def main(program_path):
     logging.basicConfig(filename=os.path.join(log_dir, f"{datetime.now(tz=timezone.utc).strftime('%Y-%m-%dT%H-%MZ')}.log"), encoding="utf-8", level=logging.DEBUG)
     db_path = "ref_management_db.sql"
 
-    with open("config.json", "r") as f:
+    config_path = os.path.join(program_path, "config.json")
+    with open(config_path, "r") as f:
         config = json.load(f)
 
     bvv_credentials = config['bvv_credentials']
