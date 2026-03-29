@@ -17,7 +17,7 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 from helper.Mailing import SMTPSettings, MailConstructor, Mailer
 from manager.BVVTools import BVVScraper, parse_courses_from_html, normalize_course
@@ -95,7 +95,9 @@ def send_new_course_notification(db_path: str, smtp_settings: SMTPSettings):
 
 
 def main(program_path):
-    logging.basicConfig(filename=os.path.join(program_path, "recent.log"), encoding="utf-8", level=logging.DEBUG)
+    log_dir = os.path.join(program_path, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    logging.basicConfig(filename=os.path.join(log_dir, f"{datetime.now(tz=timezone.utc).strftime('%Y-%m-%dT%H-%MZ')}.log"), encoding="utf-8", level=logging.DEBUG)
     db_path = "ref_management_db.sql"
 
     with open("config.json", "r") as f:

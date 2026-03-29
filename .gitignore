@@ -1,2 +1,4 @@
 /.idea/
-/_program/
+config.json
+/logs/
+ref_management_db.sql
