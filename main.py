@@ -98,7 +98,8 @@ def main(program_path):
     log_dir = os.path.join(program_path, "logs")
     os.makedirs(log_dir, exist_ok=True)
     logging.basicConfig(filename=os.path.join(log_dir, f"{datetime.now(tz=timezone.utc).strftime('%Y-%m-%dT%H-%MZ')}.log"), encoding="utf-8", level=logging.DEBUG)
-    db_path = "ref_management_db.sql"
+
+    db_path = os.path.join(program_path, "ref_management_db.sql")
 
     config_path = os.path.join(program_path, "config.json")
     with open(config_path, "r") as f:
