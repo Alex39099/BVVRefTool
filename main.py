@@ -91,6 +91,7 @@ def send_new_course_notification(db_path: str, smtp_settings: SMTPSettings):
             subject=f"Neuer SR Kurs: {course.label} ({course.city})"
         )
         mail_constructor.plain_text = str(course)
+        mail_constructor.html_text = course.to_html()
         mailer.send_mail(mail_constructor.get_mail())
 
 
