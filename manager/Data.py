@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
+from html import escape
 
 
 class UpperStrEnum(StrEnum):
@@ -119,6 +120,70 @@ class Course:
 
     def has_open_registrations(self, today: date = date.today()):
         return self.registration_start <= today <= self.registration_end
+
+    def __str__(self) -> str:
+        licenses = "\n".join(
+            f"    - {lic.type.value}/{lic.category.value}"
+            for lic in self.grantable_licenses
+        ) or "    - none"
+
+        return (
+            f"Course {self.id} — {self.label}\n"
+            f"{'-' * 50}\n"
+            f"District:            {self.district}\n"
+            f"Type:                {self.type}\n"
+            f"Location:            {self.city}\n"
+            f"Date:                {self.date_start} → {self.date_end}\n"
+            f"Registration:        {self.registration_start} → {self.registration_end}\n"
+            f"Re-registration end: {self.reregistration_end or '-'}\n"
+            f"Deregistration end:  {self.deregistration_end or '-'}\n"
+            f"\n"
+            f"Capacity:\n"
+            f"  Free:              {self.free_space}\n"
+            f"  Granted:           {self.granted_space}\n"
+            f"  Waiting:           {self.waiting_count}\n"
+            f"\n"
+            f"Grantable Licenses:\n{licenses}\n"
+            f"\n"
+            f"Address:             {self.address or '-'}\n"
+            f"Remark:              {self.remark or '-'}"
+        )
+
+    def to_html(self) -> str:
+        def fmt(value):
+            return escape(str(value)) if value is not None else "-"
+
+        licenses = "".join(
+            f"<li>{escape(lic.type.value)}/{escape(lic.category.value)}</li>"
+            for lic in self.grantable_licenses
+        ) or "<li>-</li>"
+
+        return f"""
+    <table border="1" cellspacing="0" cellpadding="6">
+        <tr><th colspan="2">Course {fmt(self.id)} — {fmt(self.label)}</th></tr>
+
+        <tr><td>District</td><td>{fmt(self.district)}</td></tr>
+        <tr><td>Type</td><td>{fmt(self.type)}</td></tr>
+        <tr><td>Location</td><td>{fmt(self.city)}</td></tr>
+
+        <tr><td>Date</td><td>{fmt(self.date_start)} → {fmt(self.date_end)}</td></tr>
+        <tr><td>Registration</td><td>{fmt(self.registration_start)} → {fmt(self.registration_end)}</td></tr>
+        <tr><td>Re-registration end</td><td>{fmt(self.reregistration_end)}</td></tr>
+        <tr><td>Deregistration end</td><td>{fmt(self.deregistration_end)}</td></tr>
+
+        <tr><td>Free space</td><td>{fmt(self.free_space)}</td></tr>
+        <tr><td>Granted space</td><td>{fmt(self.granted_space)}</td></tr>
+        <tr><td>Waiting count</td><td>{fmt(self.waiting_count)}</td></tr>
+
+        <tr>
+            <td>Grantable Licenses</td>
+            <td><ul>{licenses}</ul></td>
+        </tr>
+
+        <tr><td>Address</td><td>{fmt(self.address)}</td></tr>
+        <tr><td>Remark</td><td>{fmt(self.remark)}</td></tr>
+    </table>
+    """.strip()
 
 
 class RegistrationStatus(UpperStrEnum):
