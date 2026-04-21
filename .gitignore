@@ -1,4 +1,5 @@
 /.idea/
 config.json
+gc_credentials.json
 /logs/
 ref_management_db.sql
