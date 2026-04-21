@@ -62,7 +62,7 @@ class MailConstructor:
     html_text: str | None = None
     attachments: list[Attachment] = field(default_factory=list)
 
-    def __post_init__(self, to_mail: tuple[str, str] | None = None):
+    def __post_init__(self, to_mail: tuple[str | None, str] | None = None):
         if to_mail is not None and to_mail not in self.to_mails:
             self.to_mails.append(to_mail)
 
