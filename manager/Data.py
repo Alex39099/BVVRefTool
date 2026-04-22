@@ -4,6 +4,8 @@ from datetime import date, datetime
 from enum import StrEnum
 from html import escape
 
+from google.api_core.retry import if_transient_error
+
 
 class UpperStrEnum(StrEnum):
     @classmethod
@@ -133,13 +135,16 @@ class Course:
             for lic in self.grantable_licenses
         ) or "    - none"
 
+        date_str = (f"{self.fmt_date(self.date_start)} → {self.fmt_date(self.date_end)}"
+                    if self.date_start != self.date_end else self.fmt_date(self.date_start))
+
         return (
             f"Course {self.id} — {self.label}\n"
             f"{'-' * 50}\n"
             f"District:            {self.district}\n"
             f"Type:                {self.type}\n"
             f"Location:            {self.city}\n"
-            f"Date:                {self.fmt_date(self.date_start)} → {self.fmt_date(self.date_end)}\n"
+            f"Date:                {date_str}\n"
             f"Registration:        {self.registration_start} → {self.registration_end}\n"
             f"Re-registration end: {self.reregistration_end or '-'}\n"
             f"Deregistration end:  {self.deregistration_end or '-'}\n"
@@ -166,6 +171,9 @@ class Course:
             for lic in self.grantable_licenses
         ) or "<li>-</li>"
 
+        date_str = (f"{fmt(self.date_start)} → {fmt(self.date_end)}"
+                    if self.date_start != self.date_end else fmt(self.date_start))
+
         return f"""
     <table border="1" cellspacing="0" cellpadding="6">
         <tr><th colspan="2">Course {fmt(self.id)} — {fmt(self.label)}</th></tr>
@@ -174,7 +182,7 @@ class Course:
         <tr><td>Type</td><td>{fmt(self.type)}</td></tr>
         <tr><td>Location</td><td>{fmt(self.city)}</td></tr>
 
-        <tr><td>Date</td><td>{fmt(self.date_start)} → {fmt(self.date_end)}</td></tr>
+        <tr><td>Date</td><td>{date_str}</td></tr>
         <tr><td>Registration</td><td>{fmt(self.registration_start)} → {fmt(self.registration_end)}</td></tr>
         <tr><td>Re-registration end</td><td>{fmt(self.reregistration_end)}</td></tr>
         <tr><td>Deregistration end</td><td>{fmt(self.deregistration_end)}</td></tr>
