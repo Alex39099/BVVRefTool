@@ -37,7 +37,7 @@ class SubscriptionService:
                 name=row[0],
                 mail=row[1],
                 active=row[2],
-                token=row.get(3)
+                token=row[3] if len(row) > 3 else None
             )
             for row in spreadsheet_data
         ]
@@ -72,7 +72,7 @@ class SubscriptionService:
 
         logger.info(f"Sending new course notifications for courses: {[(course.id, course.label) for course in courses_of_interest]}")
 
-        for course in added_courses:
+        for course in courses_of_interest:
             mail_constructor = MailConstructor(
                 from_mail=self.from_mail,
                 subject=f"Neuer SR Lehrgang: {course.label} ({course.city})"
