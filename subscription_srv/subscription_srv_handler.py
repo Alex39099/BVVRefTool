@@ -65,7 +65,6 @@ class SubscriptionService:
             CourseType.AUSBILDUNG
         }
         courses_of_interest = [course for course in added_courses if (
-            course.district in ['BVV', 'BVV/Sch'] and
             any(lic in grantable_licenses_of_interest for lic in course.grantable_licenses) and
             course.type in course_types_of_interest
         )]

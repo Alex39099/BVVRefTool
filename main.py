@@ -61,7 +61,9 @@ def scrape_and_save_data(credentials: tuple[str, str], db_path: str) -> (int, da
     return run_id, collected_at
 
 
-def send_new_course_notification(db_path: str, smtp_settings: SMTPSettings, gc_credentials: Credentials, gc_subscriptions_spreadsheet_id: str):
+def send_new_course_notification(db_path: str, smtp_settings: SMTPSettings,
+                                 districts_of_interest: list[str],
+                                 gc_credentials: Credentials, gc_subscriptions_spreadsheet_id: str):
     snapshot_repo = SnapshotRepository(db_path)
     recent_course_snapshots = snapshot_repo.get_recent_snapshots(source=SnapshotSource.BVV_COURSES, limit=2)
     parsed_courses = [parse_courses_from_html(snapshot.raw_data) for snapshot in recent_course_snapshots]
@@ -80,11 +82,10 @@ def send_new_course_notification(db_path: str, smtp_settings: SMTPSettings, gc_c
     events = diff_layer.diff(previous_courses, latest_courses)
 
     added_courses = [e.after for e in events if e.type == ChangeEventType.ADDED]
+    # filter only for relevant districts
+    courses_of_interest = [course for course in added_courses if course.district in districts_of_interest]
 
     # sending mail to management
-    # filter only for relevant districts
-    courses_of_interest = [course for course in added_courses if course.district in ['BVV', 'BVV/Sch']]
-
     if len(courses_of_interest) == 0:
         return False  # no new courses
 
@@ -106,7 +107,7 @@ def send_new_course_notification(db_path: str, smtp_settings: SMTPSettings, gc_c
         spreadsheet_id=gc_subscriptions_spreadsheet_id,
         gc_credentials=gc_credentials
     )
-    subscriptions_srv.send_new_course_notifications(added_courses)
+    subscriptions_srv.send_new_course_notifications(courses_of_interest)
 
 
 def main(program_path):
@@ -141,8 +142,8 @@ def main(program_path):
         oauth_file_path=gc_oauth_file_path,
         token_file_path=gc_token_file_path
     )
-
-    send_new_course_notification(db_path, smtp_settings, gc_credentials, gc_subscriptions_spreadsheet_id)
+    districts_of_interest = config['general'].get('districts', [])
+    send_new_course_notification(db_path, smtp_settings, districts_of_interest, gc_credentials, gc_subscriptions_spreadsheet_id)
 
     # only keep latest snapshots from current run_id
     snapshot_rep = SnapshotRepository(db_path)
