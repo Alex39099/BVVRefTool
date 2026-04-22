@@ -1,6 +1,6 @@
 #  Copyright (c) 2026. Alexander Schmid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from enum import StrEnum
 from html import escape
 
@@ -121,6 +121,12 @@ class Course:
     def has_open_registrations(self, today: date = date.today()):
         return self.registration_start <= today <= self.registration_end
 
+    @staticmethod
+    def fmt_date(value: datetime | date | None) -> str | None:
+        if isinstance(value, datetime) or isinstance(value, date):
+            return value.strftime('%d.%m.%Y')
+        return None
+
     def __str__(self) -> str:
         licenses = "\n".join(
             f"    - {lic.type.value}/{lic.category.value}"
@@ -133,7 +139,7 @@ class Course:
             f"District:            {self.district}\n"
             f"Type:                {self.type}\n"
             f"Location:            {self.city}\n"
-            f"Date:                {self.date_start} → {self.date_end}\n"
+            f"Date:                {self.fmt_date(self.date_start)} → {self.fmt_date(self.date_end)}\n"
             f"Registration:        {self.registration_start} → {self.registration_end}\n"
             f"Re-registration end: {self.reregistration_end or '-'}\n"
             f"Deregistration end:  {self.deregistration_end or '-'}\n"
@@ -151,6 +157,8 @@ class Course:
 
     def to_html(self) -> str:
         def fmt(value):
+            if isinstance(value, datetime) or isinstance(value, date):
+                value = self.fmt_date(value)
             return escape(str(value)) if value is not None else "-"
 
         licenses = "".join(
