@@ -30,7 +30,7 @@ def authorize(oauth_file_path: str | None, token_file_path: str = "gc_token.json
             creds = flow.run_local_server(port=0)
         else:
             raise ValueError(f"no token file at {token_file_path} and no credentials file at {oauth_file_path}")
-      # Save the credentials for the next run
+        # Save the credentials for the next run
         with open(token_file_path, "w") as token:
             token.write(creds.to_json())
 

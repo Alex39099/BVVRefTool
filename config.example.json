@@ -20,5 +20,10 @@
         "oauth_client_file_path": "gc_credentials.json",
         "token_file_path": "gc_token.json",
         "subscriptions_spreadsheet_id": "CHANGE_TO_YOUR_SETTINGS"
+    },
+    "subscription_srv": {
+        "spreadsheet_id": "CHANGE_TO_YOUR_SETTINGS",
+        "unsubscribe_endpoint": "CHANGE_TO_YOUR_SETTINGS",
+        "unsubscribe_token_secret": "CHANGE_TO_YOUR_SETTINGS"
     }
 }

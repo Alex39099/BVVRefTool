@@ -19,8 +19,6 @@ import os
 import sys
 from datetime import datetime, timezone
 
-from google.oauth2.credentials import Credentials
-
 from helper import GoogleSheets
 from helper.Mailing import SMTPSettings, MailConstructor, Mailer
 from manager.BVVTools import BVVScraper, parse_courses_from_html, normalize_course
@@ -61,9 +59,7 @@ def scrape_and_save_data(credentials: tuple[str, str], db_path: str) -> (int, da
     return run_id, collected_at
 
 
-def send_new_course_notification(db_path: str, smtp_settings: SMTPSettings,
-                                 districts_of_interest: list[str],
-                                 gc_credentials: Credentials, gc_subscriptions_spreadsheet_id: str):
+def send_new_course_notification_management(db_path: str, smtp_settings: SMTPSettings, districts_of_interest: list[str]):
     snapshot_repo = SnapshotRepository(db_path)
     recent_course_snapshots = snapshot_repo.get_recent_snapshots(source=SnapshotSource.BVV_COURSES, limit=2)
     parsed_courses = [parse_courses_from_html(snapshot.raw_data) for snapshot in recent_course_snapshots]
@@ -100,14 +96,52 @@ def send_new_course_notification(db_path: str, smtp_settings: SMTPSettings,
         mail_constructor.html_text = course.to_html()
         mailer.send_mail(mail_constructor.get_mail())
 
-    # subscription service
+
+def subscription_srv(db_path: str, smtp_settings: SMTPSettings,
+                     districts_of_interest: list[str], subscription_srv_config: dict[str, any],
+                     google_sheets_config: dict[str, any]):
+    snapshot_repo = SnapshotRepository(db_path)
+    recent_course_snapshots = snapshot_repo.get_recent_snapshots(source=SnapshotSource.BVV_COURSES, limit=2)
+    parsed_courses = [parse_courses_from_html(snapshot.raw_data) for snapshot in recent_course_snapshots]
+    normalized_courses = [[normalize_course(parsed_course) for parsed_course in parsed_courses[i]]
+                          for i in range(len(parsed_courses))]
+
+    if len(normalized_courses) == 0:
+        raise ValueError("no data available, fetch data first")
+
+    latest_courses = normalized_courses[0]
+    previous_courses = []
+    if len(normalized_courses) > 1:
+        previous_courses = normalized_courses[1]
+
+    diff_layer = DiffLayer(key_func=lambda c: c.id)
+    events = diff_layer.diff(previous_courses, latest_courses)
+
+    added_courses = [e.after for e in events if e.type == ChangeEventType.ADDED]
+    # filter only for relevant districts
+    courses_of_interest = [course for course in added_courses if course.district in districts_of_interest]
+
+    if len(courses_of_interest) == 0:
+        logger.info("no courses of interest for subscription srv")
+        return
+
+    # Google Sheets credentials
+    gc_credentials = GoogleSheets.authorize(
+        oauth_file_path=google_sheets_config['oauth_client_file_path'],
+        token_file_path=google_sheets_config['token_file_path']
+    )
+
+    # Subscription Service
     subscriptions_srv = SubscriptionService(
         mailer=Mailer(smtp_settings),
         from_mail=('SR Management', smtp_settings.username),
-        spreadsheet_id=gc_subscriptions_spreadsheet_id,
-        gc_credentials=gc_credentials
+        spreadsheet_id=subscription_srv_config['spreadsheet_id'],
+        gc_credentials=gc_credentials,
+        unsubscribe_endpoint=subscription_srv_config['unsubscribe_endpoint'],
+        unsubscribe_token_secret=subscription_srv_config['unsubscribe_token_secret']
     )
     subscriptions_srv.send_new_course_notifications(courses_of_interest)
+    logger.info("subscription service finished")
 
 
 def main(program_path):
@@ -133,17 +167,22 @@ def main(program_path):
         username=mail_credentials['smtp_username'],
         password=mail_credentials['smtp_password']
     )
-    google_sheets_configurations = config['google_sheets']
-    gc_oauth_file_path = google_sheets_configurations['oauth_client_file_path']
-    gc_token_file_path = google_sheets_configurations['token_file_path']
-    gc_subscriptions_spreadsheet_id = google_sheets_configurations['subscriptions_spreadsheet_id']
 
-    gc_credentials = GoogleSheets.authorize(
-        oauth_file_path=gc_oauth_file_path,
-        token_file_path=gc_token_file_path
-    )
     districts_of_interest = config['general'].get('districts', [])
-    send_new_course_notification(db_path, smtp_settings, districts_of_interest, gc_credentials, gc_subscriptions_spreadsheet_id)
+
+    # send course notification to management
+    send_new_course_notification_management(db_path, smtp_settings, districts_of_interest)
+
+    # subscription service
+    try:
+        subscription_srv(db_path=db_path,
+                         smtp_settings=smtp_settings,
+                         districts_of_interest=districts_of_interest,
+                         subscription_srv_config=config['subscription_srv'],
+                         google_sheets_config=config['google_sheets'])
+    except Exception as e:
+        logger.error("Something went wrong for subscription service")
+        logger.exception(e)
 
     # only keep latest snapshots from current run_id
     snapshot_rep = SnapshotRepository(db_path)

@@ -1,3 +1,6 @@
+import base64
+import hashlib
+import hmac
 import logging
 from dataclasses import dataclass
 
@@ -24,11 +27,13 @@ class SubscriptionService:
     from_mail: tuple[str, str]
     spreadsheet_id: str
     gc_credentials: Credentials
+    unsubscribe_endpoint: str
+    unsubscribe_token_secret: str
 
     def get_recipients_from_gc(self) -> list[Recipient]:
         spreadsheet_data = read_spreadsheet_data(
             spreadsheet_id=self.spreadsheet_id,
-            range_name="A2:D", # exclude header
+            range_name="mailing_backend!A2:D",  # exclude header
             credentials=self.gc_credentials
         )
 
@@ -41,6 +46,20 @@ class SubscriptionService:
             )
             for row in spreadsheet_data
         ]
+
+    def make_unsubscribe_token(self, email):
+        return make_hmac_token(self.unsubscribe_token_secret, email)
+
+    def build_unsubscribe_html_footer(self, email: str) -> str:
+        token = self.make_unsubscribe_token(email)
+        link = f"{self.unsubscribe_endpoint}?token={token}"
+
+        return f"""
+        <hr>
+        <p style="font-size:12px;color:#666;">
+            <a href="{link}">Unsubscribe</a>
+        </p>
+        """
 
     def send_new_course_notifications(self, added_courses: list[Course]):
         if not added_courses:
@@ -76,10 +95,19 @@ class SubscriptionService:
                 from_mail=self.from_mail,
                 subject=f"Neuer SR Lehrgang: {course.label} ({course.city})"
             )
-            mail_constructor.plain_text = str(course)
-            mail_constructor.html_text = course.to_html()
+
+            base_html = course.to_html()
 
             # send mail to each recipient individually
             for recipient in recipients:
+                unsubscribe_html = self.build_unsubscribe_html_footer(recipient.mail)
+                mail_constructor.html_text = base_html + unsubscribe_html
+
                 mail_constructor.to_mails = [(recipient.name, recipient.mail)]
                 self.mailer.send_mail(mail_constructor.get_mail())
+
+
+def make_hmac_token(secret, email):
+    sig = hmac.new(secret.encode(), email.encode(), hashlib.sha256).hexdigest()
+    token = base64.urlsafe_b64encode(f"{email}|{sig}".encode()).decode()
+    return token
