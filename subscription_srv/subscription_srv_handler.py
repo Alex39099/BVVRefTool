@@ -100,11 +100,14 @@ class SubscriptionService:
 
             # send mail to each recipient individually
             for recipient in recipients:
-                unsubscribe_html = self.build_unsubscribe_html_footer(recipient.mail)
-                mail_constructor.html_text = base_html + unsubscribe_html
+                try:
+                    unsubscribe_html = self.build_unsubscribe_html_footer(recipient.mail)
+                    mail_constructor.html_text = base_html + unsubscribe_html
 
-                mail_constructor.to_mails = [(recipient.name, recipient.mail)]
-                self.mailer.send_mail(mail_constructor.get_mail())
+                    mail_constructor.to_mails = [(recipient.name, recipient.mail)]
+                    self.mailer.send_mail(mail_constructor.get_mail())
+                except Exception as e:
+                    logger.error(f"failed to send mail to {(recipient.name, recipient.mail)} because {e}")
 
 
 def make_hmac_token(secret, email):
