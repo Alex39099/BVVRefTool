@@ -160,11 +160,19 @@ class Course:
             f"Remark:              {self.remark or '-'}"
         )
 
-    def to_html(self) -> str:
+    def to_html(self, skip_empty: bool = False) -> str:
         def fmt(value):
             if isinstance(value, datetime) or isinstance(value, date):
                 value = self.fmt_date(value)
             return escape(str(value)) if value is not None else "-"
+
+        def is_empty(value) -> bool:
+            return value is None or str(value).strip() == ""
+
+        def row(label, value):
+            if skip_empty and is_empty(value):
+                return ""
+            return f"<tr><td>{label}</td><td>{fmt(value)}</td></tr>"
 
         licenses = "".join(
             f"<li>{escape(lic.type.value)}/{escape(lic.category.value)}</li>"
@@ -178,26 +186,26 @@ class Course:
     <table border="1" cellspacing="0" cellpadding="6">
         <tr><th colspan="2">Course {fmt(self.id)} — {fmt(self.label)}</th></tr>
 
-        <tr><td>District</td><td>{fmt(self.district)}</td></tr>
-        <tr><td>Type</td><td>{fmt(self.type)}</td></tr>
-        <tr><td>Location</td><td>{fmt(self.city)}</td></tr>
+        {row("District", self.district)}
+        {row("Type", self.type)}
+        {row("Location", self.city)}
 
         <tr><td>Date</td><td>{date_str}</td></tr>
         <tr><td>Registration</td><td>{fmt(self.registration_start)} → {fmt(self.registration_end)}</td></tr>
-        <tr><td>Re-registration end</td><td>{fmt(self.reregistration_end)}</td></tr>
-        <tr><td>Deregistration end</td><td>{fmt(self.deregistration_end)}</td></tr>
+        {row("Re-registration end", self.reregistration_end)}
+        {row("Deregistration end", self.deregistration_end)}
 
-        <tr><td>Free space</td><td>{fmt(self.free_space)}</td></tr>
-        <tr><td>Granted space</td><td>{fmt(self.granted_space)}</td></tr>
-        <tr><td>Waiting count</td><td>{fmt(self.waiting_count)}</td></tr>
+        {row("Free space", self.free_space)}
+        {row("Granted space", self.granted_space)}
+        {row("Waiting count", self.waiting_count)}
 
         <tr>
             <td>Grantable Licenses</td>
             <td><ul>{licenses}</ul></td>
         </tr>
 
-        <tr><td>Address</td><td>{fmt(self.address)}</td></tr>
-        <tr><td>Remark</td><td>{fmt(self.remark)}</td></tr>
+        {row("Address", self.address)}
+        {row("Remark", self.remark)}
     </table>
     """.strip()
 
