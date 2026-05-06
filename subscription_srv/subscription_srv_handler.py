@@ -106,7 +106,7 @@ class SubscriptionService:
                 subject=f"Neuer SR Lehrgang: {course.label} ({course.city})"
             )
 
-            course_html = course.to_html()
+            course_html = course.to_html(skip_empty=True)
 
             # send mail to each recipient individually
             for recipient in recipients:
