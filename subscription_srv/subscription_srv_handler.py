@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 from google.oauth2.credentials import Credentials
 
@@ -29,6 +30,8 @@ class SubscriptionService:
     gc_credentials: Credentials
     unsubscribe_endpoint: str
     unsubscribe_token_secret: str
+
+    new_course_mail_template = Path("new_course_mail_template.html").read_text(encoding='utf-8')
 
     def get_recipients_from_gc(self) -> list[Recipient]:
         spreadsheet_data = read_spreadsheet_data(
@@ -60,6 +63,13 @@ class SubscriptionService:
             <a href="{link}">Unsubscribe</a>
         </p>
         """
+
+    def build_new_course_mail_html(self, email: str, course_html: str) -> str:
+        unsubscribe_footer = self.build_unsubscribe_html_footer(email)
+        return self.new_course_mail_template.format(
+            course_html=course_html,
+            unsubscribe_footer=unsubscribe_footer
+        )
 
     def send_new_course_notifications(self, added_courses: list[Course]):
         if not added_courses:
@@ -96,13 +106,12 @@ class SubscriptionService:
                 subject=f"Neuer SR Lehrgang: {course.label} ({course.city})"
             )
 
-            base_html = course.to_html()
+            course_html = course.to_html()
 
             # send mail to each recipient individually
             for recipient in recipients:
                 try:
-                    unsubscribe_html = self.build_unsubscribe_html_footer(recipient.mail)
-                    mail_constructor.html_text = base_html + unsubscribe_html
+                    mail_constructor.html_text = self.build_new_course_mail_html(recipient.mail, course_html)
 
                     mail_constructor.to_mails = [(recipient.name, recipient.mail)]
                     self.mailer.send_mail(mail_constructor.get_mail())
