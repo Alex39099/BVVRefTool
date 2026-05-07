@@ -160,7 +160,25 @@ class Course:
             f"Remark:              {self.remark or '-'}"
         )
 
-    def to_html(self, skip_empty: bool = False) -> str:
+    def to_html(self, skip_empty: bool = False, course_url: str | None = None, labels: dict | None = None) -> str:
+        if labels is None:
+            labels = {
+                "district": "District",
+                "type": "Type",
+                "location": "Location",
+                "date": "Date",
+                "registration": "Registration",
+                "reregistration_end": "Re-registration end",
+                "deregistration_end": "Deregistration end",
+                "free_space": "Free space",
+                "granted_space": "Granted space",
+                "waiting_count": "Waiting count",
+                "grantable_licenses": "Grantable Licenses",
+                "address": "Address",
+                "remark": "Remark",
+                "portal_link": "Open in Portal"
+            }
+
         def fmt(value):
             if isinstance(value, datetime) or isinstance(value, date):
                 value = self.fmt_date(value)
@@ -183,31 +201,32 @@ class Course:
                     if self.date_start != self.date_end else fmt(self.date_start))
 
         return f"""
-    <table border="1" cellspacing="0" cellpadding="6">
-        <tr><th colspan="2">Course {fmt(self.id)} — {fmt(self.label)}</th></tr>
+        <table border="1" cellspacing="0" cellpadding="6">
+         <tr><th colspan="2">Course {fmt(self.id)} — {fmt(self.label)}</th></tr>
 
-        {row("District", self.district)}
-        {row("Type", self.type)}
-        {row("Location", self.city)}
+         {row(labels["district"], self.district)}
+         {row(labels["type"], self.type)}
+         {row(labels["location"], self.city)}
 
-        <tr><td>Date</td><td>{date_str}</td></tr>
-        <tr><td>Registration</td><td>{fmt(self.registration_start)} → {fmt(self.registration_end)}</td></tr>
-        {row("Re-registration end", self.reregistration_end)}
-        {row("Deregistration end", self.deregistration_end)}
+         <tr><td>{labels["date"]}</td><td>{date_str}</td></tr>
+         <tr><td>{labels["registration"]}</td><td>{fmt(self.registration_start)} → {fmt(self.registration_end)}</td></tr>
+         {row(labels["reregistration_end"], self.reregistration_end)}
+         {row(labels["deregistration_end"], self.deregistration_end)}
 
-        {row("Free space", self.free_space)}
-        {row("Granted space", self.granted_space)}
-        {row("Waiting count", self.waiting_count)}
+         {row(labels["free_space"], self.free_space)}
+         {row(labels["granted_space"], self.granted_space)}
+         {row(labels["waiting_count"], self.waiting_count)}
 
-        <tr>
-            <td>Grantable Licenses</td>
-            <td><ul>{licenses}</ul></td>
-        </tr>
+         <tr>
+         <td>{labels["grantable_licenses"]}</td>
+         <td><ul>{licenses}</ul></td>
+         </tr>
 
-        {row("Address", self.address)}
-        {row("Remark", self.remark)}
-    </table>
-    """.strip()
+         {row(labels["address"], self.address)}
+         {row(labels["remark"], self.remark)}
+         {f'<tr><td colspan="2"><a href="{escape(course_url)}">{labels["portal_link"]}</a></td></tr>' if course_url else ""}
+        </table>
+        """.strip()
 
 
 class RegistrationStatus(UpperStrEnum):
