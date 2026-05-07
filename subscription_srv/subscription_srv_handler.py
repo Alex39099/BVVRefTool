@@ -19,7 +19,6 @@ class Recipient:
     name: str
     mail: str
     active: bool
-    token: str | None = None
 
 
 @dataclass
@@ -59,8 +58,7 @@ class SubscriptionService:
             Recipient(
                 name=row[0],
                 mail=row[1],
-                active=row[2],
-                token=row[3] if len(row) > 3 else None
+                active=row[2]
             )
             for row in spreadsheet_data
         ]
