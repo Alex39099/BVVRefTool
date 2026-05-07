@@ -18,12 +18,33 @@
     },
     "google_sheets": {
         "oauth_client_file_path": "gc_credentials.json",
-        "token_file_path": "gc_token.json",
-        "subscriptions_spreadsheet_id": "CHANGE_TO_YOUR_SETTINGS"
+        "token_file_path": "gc_token.json"
     },
     "subscription_srv": {
+        "from_name": "CHANGE_TO_YOUR_SETTINGS",
+        "from_mail": "CHANGE_TO_YOUR_SETTINGS",
         "spreadsheet_id": "CHANGE_TO_YOUR_SETTINGS",
         "unsubscribe_endpoint": "CHANGE_TO_YOUR_SETTINGS",
-        "unsubscribe_token_secret": "CHANGE_TO_YOUR_SETTINGS"
+        "unsubscribe_token_secret": "CHANGE_TO_YOUR_SETTINGS",
+        "course_base_url": "https://bvv.volley.de/portal/sw_personal_lehrgang!browse.action",
+        "templates": {
+            "new_course_mail": "new_course_mail_template.html"
+        },
+        "i18n": {
+            "district": "Bereich",
+            "type": "Typ",
+            "location": "Ort",
+            "date": "Datum",
+            "registration": "Anmeldezeitraum",
+            "reregistration_end": "Ummeldeschluss",
+            "deregistration_end": "Abmeldeschluss",
+            "free_space": "Freie Plätze",
+            "granted_space": "davon sofort verfügbar",
+            "waiting_count": "Warteliste",
+            "grantable_licenses": "Lizenzstufen",
+            "address": "Adresse",
+            "remark": "Bemerkung",
+            "portal_link": "Im Portal öffnen"
+        }
     }
 }

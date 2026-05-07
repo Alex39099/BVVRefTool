@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
+from AppConfig import AppConfig
 from manager.Data import RefLicenseCategory, Course, RefLicenseType, Registration, RegistrationStatus, \
     ParticipationStatus, CourseType, RefLicense, PersonIdentity, Referee, Participant, GrantableLicenseCategory, \
     GrantableLicenseType, GrantableLicense
@@ -108,6 +109,13 @@ class BVVScraper:
     club_id: str = "555"  # TSV Haunstetten
     bvv_date_format: str = "%d.%m.%Y"
     request_min_throttle: float = 5.0
+
+    @classmethod
+    def from_config(cls, config: AppConfig) -> "BVVScraper":
+        return cls(
+            credentials=(config.bvv.username, config.bvv.password),
+            club_id=config.bvv.club_id
+        )
 
     def __post_init__(self, credentials: tuple[str, str]):
         self.username = credentials[0]

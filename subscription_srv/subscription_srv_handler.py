@@ -3,10 +3,10 @@ import hashlib
 import hmac
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 
 from google.oauth2.credentials import Credentials
 
+from AppConfig import AppConfig
 from helper.GoogleSheets import read_spreadsheet_data
 from helper.Mailing import MailConstructor, Mailer
 from manager.Data import Course, GrantableLicense, GrantableLicenseType, GrantableLicenseCategory, CourseType
@@ -30,8 +30,23 @@ class SubscriptionService:
     gc_credentials: Credentials
     unsubscribe_endpoint: str
     unsubscribe_token_secret: str
+    course_base_url: str
+    i18n: dict[str, str]
+    new_course_mail_template: str
 
-    new_course_mail_template = Path("new_course_mail_template.html").read_text(encoding='utf-8')
+    @classmethod
+    def from_config(cls, config: AppConfig, gc_credentials: Credentials) -> "SubscriptionService":
+        return cls(
+            mailer=Mailer(config.smtp),
+            from_mail=config.subscription.from_mail,
+            spreadsheet_id=config.subscription.spreadsheet_id,
+            gc_credentials=gc_credentials,
+            unsubscribe_endpoint=config.subscription.unsubscribe_endpoint,
+            unsubscribe_token_secret=config.subscription.unsubscribe_token_secret,
+            course_base_url=config.subscription.course_base_url,
+            i18n=config.subscription.i18n,
+            new_course_mail_template=config.subscription.new_course_mail_template
+        )
 
     def get_recipients_from_gc(self) -> list[Recipient]:
         spreadsheet_data = read_spreadsheet_data(
@@ -105,8 +120,8 @@ class SubscriptionService:
                 from_mail=self.from_mail,
                 subject=f"Neuer SR Lehrgang: {course.label} ({course.city})"
             )
-
-            course_html = course.to_html(skip_empty=True)
+            course_url = f"{self.course_base_url}?lid={course.id}"
+            course_html = course.to_html(skip_empty=True, course_url=course_url, labels=self.i18n)
 
             # send mail to each recipient individually
             for recipient in recipients:

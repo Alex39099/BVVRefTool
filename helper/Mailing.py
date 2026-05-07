@@ -9,16 +9,10 @@ from email.utils import getaddresses, formataddr
 
 import html2text
 
+from AppConfig import SMTPSettings
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-
-@dataclass(frozen=True)
-class SMTPSettings:
-    host: str
-    port: int
-    username: str
-    password: str
 
 
 @dataclass(frozen=True)

@@ -13,14 +13,14 @@
 #      You should have received a copy of the GNU General Public License
 #      along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import json
 import logging
 import os
 import sys
 from datetime import datetime, timezone
 
+from AppConfig import AppConfig
 from helper import GoogleSheets
-from helper.Mailing import SMTPSettings, MailConstructor, Mailer
+from helper.Mailing import MailConstructor, Mailer
 from manager.BVVTools import BVVScraper, parse_courses_from_html, normalize_course
 from manager.DiffLayer import DiffLayer, ChangeEventType
 from manager.Storage import SnapshotRepository, SnapshotSource, ScraperRunningStatus
@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def scrape_and_save_data(credentials: tuple[str, str], db_path: str) -> (int, datetime):
-    scraper = BVVScraper(credentials)
+def scrape_and_save_data(db_path: str, config: AppConfig) -> (int, datetime):
+    scraper = BVVScraper.from_config(config)
     snapshot_rep = SnapshotRepository(db_path)
 
     run_id, collected_at = snapshot_rep.create_run()
@@ -59,7 +59,7 @@ def scrape_and_save_data(credentials: tuple[str, str], db_path: str) -> (int, da
     return run_id, collected_at
 
 
-def send_new_course_notification_management(db_path: str, smtp_settings: SMTPSettings, districts_of_interest: list[str]):
+def send_new_course_notification_management(db_path: str, config: AppConfig):
     snapshot_repo = SnapshotRepository(db_path)
     recent_course_snapshots = snapshot_repo.get_recent_snapshots(source=SnapshotSource.BVV_COURSES, limit=2)
     parsed_courses = [parse_courses_from_html(snapshot.raw_data) for snapshot in recent_course_snapshots]
@@ -79,17 +79,17 @@ def send_new_course_notification_management(db_path: str, smtp_settings: SMTPSet
 
     added_courses = [e.after for e in events if e.type == ChangeEventType.ADDED]
     # filter only for relevant districts
-    courses_of_interest = [course for course in added_courses if course.district in districts_of_interest]
+    courses_of_interest = [course for course in added_courses if course.district in config.general.districts]
 
     # sending mail to management
     if len(courses_of_interest) == 0:
         return False  # no new courses
 
-    mailer = Mailer(smtp_settings)
+    mailer = Mailer(config.smtp)
     for course in courses_of_interest:
         mail_constructor = MailConstructor(
-            from_mail=("SR Management", smtp_settings.username),
-            to_mail=(None, smtp_settings.username),
+            from_mail=("SR Management", config.smtp.username),
+            to_mail=(None, config.smtp.username),
             subject=f"Neuer SR Kurs: {course.label} ({course.city})"
         )
         mail_constructor.plain_text = str(course)
@@ -97,9 +97,7 @@ def send_new_course_notification_management(db_path: str, smtp_settings: SMTPSet
         mailer.send_mail(mail_constructor.get_mail())
 
 
-def subscription_srv(db_path: str, smtp_settings: SMTPSettings,
-                     districts_of_interest: list[str], subscription_srv_config: dict[str, any],
-                     google_sheets_config: dict[str, any]):
+def subscription_srv(db_path: str, config: AppConfig):
     snapshot_repo = SnapshotRepository(db_path)
     recent_course_snapshots = snapshot_repo.get_recent_snapshots(source=SnapshotSource.BVV_COURSES, limit=2)
     parsed_courses = [parse_courses_from_html(snapshot.raw_data) for snapshot in recent_course_snapshots]
@@ -119,7 +117,7 @@ def subscription_srv(db_path: str, smtp_settings: SMTPSettings,
 
     added_courses = [e.after for e in events if e.type == ChangeEventType.ADDED]
     # filter only for relevant districts
-    courses_of_interest = [course for course in added_courses if course.district in districts_of_interest]
+    courses_of_interest = [course for course in added_courses if course.district in config.general.districts]
 
     if len(courses_of_interest) == 0:
         logger.info("no courses of interest for subscription srv")
@@ -127,20 +125,13 @@ def subscription_srv(db_path: str, smtp_settings: SMTPSettings,
 
     # Google Sheets credentials
     gc_credentials = GoogleSheets.authorize(
-        oauth_file_path=google_sheets_config['oauth_client_file_path'],
-        token_file_path=google_sheets_config['token_file_path']
+        oauth_file_path=config.google_sheets.oauth_client_file_path,
+        token_file_path=config.google_sheets.token_file_path
     )
 
     # Subscription Service
-    subscriptions_srv = SubscriptionService(
-        mailer=Mailer(smtp_settings),
-        from_mail=('SR Management', smtp_settings.username),
-        spreadsheet_id=subscription_srv_config['spreadsheet_id'],
-        gc_credentials=gc_credentials,
-        unsubscribe_endpoint=subscription_srv_config['unsubscribe_endpoint'],
-        unsubscribe_token_secret=subscription_srv_config['unsubscribe_token_secret']
-    )
-    subscriptions_srv.send_new_course_notifications(courses_of_interest)
+    srv = SubscriptionService.from_config(config=config, gc_credentials=gc_credentials)
+    srv.send_new_course_notifications(courses_of_interest)
     logger.info("subscription service finished")
 
 
@@ -152,34 +143,17 @@ def main(program_path):
     db_path = os.path.join(program_path, "ref_management_db.sql")
 
     config_path = os.path.join(program_path, "config.json")
-    with open(config_path, "r") as f:
-        config = json.load(f)
+    config = AppConfig.from_file(config_path)
 
-    bvv_credentials = config['bvv_credentials']
-    bvv_username = bvv_credentials['username']
-    bvv_password = bvv_credentials['password']
-    run_id, collected_at = scrape_and_save_data((bvv_username, bvv_password), db_path)
-
-    mail_credentials = config['mail_credentials']
-    smtp_settings = SMTPSettings(
-        host=mail_credentials['smtp_host'],
-        port=mail_credentials['smtp_port'],
-        username=mail_credentials['smtp_username'],
-        password=mail_credentials['smtp_password']
-    )
-
-    districts_of_interest = config['general'].get('districts', [])
+    # scrape new data
+    run_id, collected_at = scrape_and_save_data(db_path, config)
 
     # send course notification to management
-    send_new_course_notification_management(db_path, smtp_settings, districts_of_interest)
+    send_new_course_notification_management(db_path, config)
 
     # subscription service
     try:
-        subscription_srv(db_path=db_path,
-                         smtp_settings=smtp_settings,
-                         districts_of_interest=districts_of_interest,
-                         subscription_srv_config=config['subscription_srv'],
-                         google_sheets_config=config['google_sheets'])
+        subscription_srv(db_path=db_path, config=config)
     except Exception as e:
         logger.error("Something went wrong for subscription service")
         logger.exception(e)
