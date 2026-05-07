@@ -10,11 +10,11 @@
         "password": "CHANGE_TO_YOUR_SETTINGS",
         "club_id": "CHANGE_TO_YOUR_SETTINGS"
     },
-    "mail_credentials": {
-        "smtp_host": "CHANGE_TO_YOUR_SETTINGS",
-        "smtp_port": 25,
-        "smtp_username": "CHANGE_TO_YOUR_SETTINGS",
-        "smtp_password": "CHANGE_TO_YOUR_SETTINGS"
+    "smtp_credentials": {
+        "host": "CHANGE_TO_YOUR_SETTINGS",
+        "port": 25,
+        "username": "CHANGE_TO_YOUR_SETTINGS",
+        "password": "CHANGE_TO_YOUR_SETTINGS"
     },
     "google_sheets": {
         "oauth_client_file_path": "gc_credentials.json",

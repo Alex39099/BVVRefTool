@@ -75,7 +75,7 @@ class AppConfig:
         return cls(
             general=GeneralSettings.from_dict(config['general']),
             bvv=BVVSettings.from_dict(config['bvv_credentials']),
-            smtp=SMTPSettings.from_dict(config['mail_credentials']),
+            smtp=SMTPSettings.from_dict(config['smtp_credentials']),
             google_sheets=GoogleSheetsSettings.from_dict(config['google_sheets']),
             subscription=SubscriptionSettings.from_dict(config['subscription_srv'], template_dir=config_path.parent)
         )
