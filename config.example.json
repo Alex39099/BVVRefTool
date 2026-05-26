@@ -28,7 +28,7 @@
         "unsubscribe_token_secret": "CHANGE_TO_YOUR_SETTINGS",
         "course_base_url": "https://bvv.volley.de/portal/sw_personal_lehrgang!browse.action",
         "templates": {
-            "new_course_mail": "new_course_mail_template.html"
+            "new_course_mail": "../new_course_mail_template.html"
         },
         "i18n": {
             "district": "Bereich",
