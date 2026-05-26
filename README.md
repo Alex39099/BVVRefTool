@@ -21,6 +21,3 @@ Source
 ------
 Source code is currently available on [GitHub](https://github.com/Alex39099/BVVRefTool). Please respect the license (GNU General Public License v3).
 
-Contributing
-------
-Significant contributing via pull requests (judged by me) will result in a reference also on Spigot. Main.py sometimes includes a to-do-list with left over feature ideas. Feel free to implement them.
