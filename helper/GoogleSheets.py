@@ -21,11 +21,12 @@ def authorize(oauth_file_path: str | None, token_file_path: str = "gc_token.json
     if os.path.exists(token_file_path):
         creds = Credentials.from_authorized_user_file(token_file_path, SCOPES)
 
-    # no valid credentials, user must log in
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
+            logger.debug("refreshing authentication token...")
             creds.refresh(Request())
         elif oauth_file_path:
+            logger.info("no valid Google credentials, user most log in")
             flow = InstalledAppFlow.from_client_secrets_file(oauth_file_path, SCOPES)
             creds = flow.run_local_server(port=0)
         else:
