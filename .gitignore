@@ -1,5 +1,8 @@
 /.idea/
 config.json
 gc_credentials.json
+gc_credentials_py.json
+gc_token.json
+gc_token_py.json
 /logs/
 ref_management_db.sql
