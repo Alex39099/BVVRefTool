@@ -159,6 +159,16 @@ def main(program_path):
         logger.error("Something went wrong for subscription service")
         logger.exception(e)
 
+        # send mail to management
+        mailer = Mailer(config.smtp)
+        mail_constructor = MailConstructor(
+            from_mail=("SR Management", config.smtp.username),
+            to_mail=(None, config.smtp.username),
+            subject=f"Subscription Service Error"
+        )
+        mail_constructor.plain_text = f"Something went wrong for subscription service: {e}"
+        mailer.send_mail(mail_constructor.get_mail())
+
     # only keep latest snapshots from current run_id
     snapshot_rep = SnapshotRepository(db_path)
     snapshot_rep.delete_runs_older_than(collected_at)
