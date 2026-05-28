@@ -31,9 +31,16 @@ class BVVSettings(FromDictMixin):
 
 
 @dataclass(frozen=True)
-class GoogleSheetsSettings(FromDictMixin):
-    oauth_client_file_path: str
-    token_file_path: str
+class GoogleSheetsSettings:
+    oauth_client_file_path: Path
+    token_file_path: Path
+
+    @classmethod
+    def from_dict(cls, data: dict, config_dir: Path) -> "GoogleSheetsSettings":
+        return cls(
+            oauth_client_file_path=config_dir / data['oauth_client_file_path'],
+            token_file_path=config_dir / data['token_file_path']
+        )
 
 
 @dataclass(frozen=True)
@@ -69,14 +76,14 @@ class AppConfig:
 
     @classmethod
     def from_file(cls, config_path: str | Path) -> "AppConfig":
-        config_path = Path(config_path)
+        config_path = Path(config_path).resolve()
+        config_dir = config_path.parent
         config = json.loads(config_path.read_text(encoding='utf-8'))
 
         return cls(
             general=GeneralSettings.from_dict(config['general']),
             bvv=BVVSettings.from_dict(config['bvv_credentials']),
             smtp=SMTPSettings.from_dict(config['smtp_credentials']),
-            google_sheets=GoogleSheetsSettings.from_dict(config['google_sheets']),
-            subscription=SubscriptionSettings.from_dict(config['subscription_srv'], template_dir=config_path.parent)
+            google_sheets=GoogleSheetsSettings.from_dict(config['google_sheets'], config_dir=config_dir),
+            subscription=SubscriptionSettings.from_dict(config['subscription_srv'], template_dir=config_dir)
         )
-

@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"] # ["https://www.googleapis.com/auth/spreadsheets"]
 
 
-def authorize(oauth_file_path: str | None, token_file_path: str = "gc_token.json") -> Credentials:
+def authorize(oauth_file_path: Path | str | None, token_file_path: Path | str = "gc_token.json") -> Credentials:
     if not token_file_path:
         raise ValueError("token_file_path is required")
 
