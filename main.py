@@ -92,8 +92,9 @@ def send_new_course_notification_management(db_path: str, config: AppConfig):
             to_mail=(None, config.smtp.username),
             subject=f"Neuer SR Kurs: {course.label} ({course.city})"
         )
-        mail_constructor.plain_text = str(course)
-        mail_constructor.html_text = course.to_html()
+        course_url = f"{config.subscription.course_base_url}?lid={course.id}"
+        labels = config.subscription.i18n
+        mail_constructor.html_text = course.to_html(course_url=course_url, labels=labels)
         mailer.send_mail(mail_constructor.get_mail())
 
 
@@ -165,7 +166,7 @@ def main(program_path):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        # print("Usage: python script.py <config_path>")
+        # print("Usage: python script.py <config_dir>")
         sys_cwd = os.getcwd()
     else:
         sys_cwd = sys.argv[1]
