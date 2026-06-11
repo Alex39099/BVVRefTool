@@ -34,13 +34,12 @@ class Attachment:
             raise ValueError(f"type {self.type} is not valid, expected 'maintype/subtype'")
 
     @property
-    def maintype(self) -> str:
-        return self.type.split('/', 1)[0]
+    def maintype(self) -> str | None:
+        return self.type.split('/', 1)[0] if self.type else None
 
     @property
-    def subtype(self) -> str:
-        return self.type.split('/', 1)[1]
-
+    def subtype(self) -> str | None:
+        return self.type.split('/', 1)[1] if self.type else None
 
 @dataclass
 class MailConstructor:
@@ -70,7 +69,7 @@ class MailConstructor:
 
         if not (self.plain_text or self.html_text):
             raise ValueError("neither plain_text or html_text is set")
-        plain_text = self.plain_text if self.plain_text else html2text.html2text(self.html_text)
+        plain_text = self.plain_text if self.plain_text else html2text.html2text(self.html_text) # type: ignore
 
         msg = EmailMessage()
         msg.set_content(plain_text)
@@ -102,7 +101,7 @@ class Mailer:
         main_recipients = [(name, addr) for name, addr in getaddresses(msg.get_all("To", []))]
 
         if self.smtp_settings is None:
-            logger.warning(f"smtp_settings are None, not actually sending mails...")
+            logger.warning("smtp_settings are None, not actually sending mails...")
             logger.info(f"sent mail to {main_recipients} (excluding cc, bcc): {msg}")
             return
 

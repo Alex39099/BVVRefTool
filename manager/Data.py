@@ -4,8 +4,6 @@ from datetime import date, datetime
 from enum import StrEnum
 from html import escape
 
-from google.api_core.retry import if_transient_error
-
 
 class UpperStrEnum(StrEnum):
     @classmethod

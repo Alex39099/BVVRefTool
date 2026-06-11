@@ -63,7 +63,7 @@ class SnapshotRepository:
         conn.commit()
         conn.close()
 
-    def create_run(self, status: ScraperRunningStatus = ScraperRunningStatus.RUNNING) -> (int, datetime):
+    def create_run(self, status: ScraperRunningStatus = ScraperRunningStatus.RUNNING) -> tuple[int, datetime]:
         """
         Creates a scraper run
         :param status: the status of the scraper run, defaults to RUNNING
@@ -83,6 +83,7 @@ class SnapshotRepository:
         conn.commit()
         conn.close()
         collected_at = datetime.fromisoformat(collected_at_str)
+        assert run_id is not None
         return run_id, collected_at
 
     def delete_run(self, run_id: int) -> None:
@@ -160,6 +161,7 @@ class SnapshotRepository:
                 (run_id, source, raw_data)
             ).lastrowid
             conn.commit()
+            assert snapshot_id is not None
             return snapshot_id
         except sqlite3.IntegrityError as e:
             raise ValueError(f"Snapshot for run_id={run_id} and source='{source}' already exists") from e

@@ -22,6 +22,7 @@ from AppConfig import AppConfig
 from helper import GoogleSheets
 from helper.Mailing import MailConstructor, Mailer
 from manager.BVVTools import BVVScraper, parse_courses_from_html, normalize_course
+from manager.Data import Course
 from manager.DiffLayer import DiffLayer, ChangeEventType
 from manager.Storage import SnapshotRepository, SnapshotSource, ScraperRunningStatus
 from subscription_srv.subscription_srv_handler import SubscriptionService
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def scrape_and_save_data(db_path: str, config: AppConfig) -> (int, datetime):
+def scrape_and_save_data(db_path: str, config: AppConfig) -> tuple[int, datetime]:
     scraper = BVVScraper.from_config(config)
     snapshot_rep = SnapshotRepository(db_path)
 
@@ -74,12 +75,12 @@ def send_new_course_notification_management(db_path: str, config: AppConfig):
     if len(normalized_courses) > 1:
         previous_courses = normalized_courses[1]
 
-    diff_layer = DiffLayer(key_func=lambda c: c.id)
+    diff_layer = DiffLayer[Course](key_func=lambda c: c.id)
     events = diff_layer.diff(previous_courses, latest_courses)
 
     added_courses = [e.after for e in events if e.type == ChangeEventType.ADDED]
     # filter only for relevant districts
-    courses_of_interest = [course for course in added_courses if course.district in config.general.districts]
+    courses_of_interest = [course for course in added_courses if course is not None and course.district in config.general.districts]
 
     # sending mail to management
     if len(courses_of_interest) == 0:
@@ -113,12 +114,12 @@ def subscription_srv(db_path: str, config: AppConfig):
     if len(normalized_courses) > 1:
         previous_courses = normalized_courses[1]
 
-    diff_layer = DiffLayer(key_func=lambda c: c.id)
+    diff_layer = DiffLayer[Course](key_func=lambda c: c.id)
     events = diff_layer.diff(previous_courses, latest_courses)
 
     added_courses = [e.after for e in events if e.type == ChangeEventType.ADDED]
     # filter only for relevant districts
-    courses_of_interest = [course for course in added_courses if course.district in config.general.districts]
+    courses_of_interest = [course for course in added_courses if course is not None and course.district in config.general.districts]
 
     if len(courses_of_interest) == 0:
         logger.info("no courses of interest for subscription srv")
@@ -164,7 +165,7 @@ def main(program_path):
         mail_constructor = MailConstructor(
             from_mail=("SR Management", config.smtp.username),
             to_mail=(None, config.smtp.username),
-            subject=f"Subscription Service Error"
+            subject="Subscription Service Error"
         )
         mail_constructor.plain_text = f"Something went wrong for subscription service: {e}"
         mailer.send_mail(mail_constructor.get_mail())

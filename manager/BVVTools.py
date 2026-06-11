@@ -6,7 +6,7 @@ import time
 import warnings
 from dataclasses import dataclass, InitVar
 from datetime import datetime, date
-from typing import BinaryIO
+from typing import Any, BinaryIO, cast
 from urllib.parse import urlparse, parse_qs
 
 import pandas as pd
@@ -48,7 +48,7 @@ class BVVSession(requests.Session):
         # Disable connection reuse
         self.headers.update({"Connection": "close"})
 
-    def request(self, method, url, **kwargs):
+    def request(self, method, url, **kwargs): # type: ignore
         # enforce timeout
         if "timeout" not in kwargs:
             kwargs["timeout"] = 15
@@ -88,7 +88,7 @@ class BVVSession(requests.Session):
         logging.info("BVV_SCALPER: logged in")
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb): # type: ignore
         try:
             response = self.post(self.url_logout)
             if response.status_code != 200:
@@ -252,6 +252,9 @@ def parse_courses_from_html(raw_html: bytes) -> list[dict[str, str]]:
 
     # Find course table by class name
     table = soup.find('table', {'class': 'portaltable'})
+    
+    if table is None:
+        raise ValueError("Could not find course table in HTML")        
 
     courses = []
 
@@ -270,6 +273,10 @@ def parse_courses_from_html(raw_html: bytes) -> list[dict[str, str]]:
             if not current_section:
                 raise ValueError("Parser error: course row encountered before section header was parsed")
             
+            # get lid
+            lid_raw = cells[8].find('a', href=True)
+            lid = str(lid_raw['href']).split('lid=')[1].split('&')[0] if lid_raw and 'lid=' in lid_raw['href'] else None
+            
             course_data = {
                 'Bereich': cells[0].text,
                 'Datum': cells[1].text,
@@ -279,7 +286,7 @@ def parse_courses_from_html(raw_html: bytes) -> list[dict[str, str]]:
                 'freie Plätze': cells[5].text,
                 'davon sofort verfügbar': cells[6].text,
                 'Warteliste': cells[7].text,
-                'Id': cells[8].find('a')['href'].split('lid=')[1].split('&')[0],
+                'Id': lid,
                 'Typ': current_section
             }
             courses.append(course_data)
@@ -322,11 +329,11 @@ def parse_deep_course_from_html(course_id: str, raw_html: bytes) -> dict[str, st
     return {'Id': course_id, **fetched_info}
 
 
-def parse_licenses_from_html(raw_html: bytes) -> list[dict[str, any]]:
+def parse_licenses_from_html(raw_html: bytes) -> list[dict[str, Any]]:
     raise NotImplementedError(raw_html)
 
 
-def parse_licenses_from_excel(excel: bytes | BinaryIO) -> list[dict[str, any]]:
+def parse_licenses_from_excel(excel: bytes | BinaryIO) -> list[dict[str, Any]]:
     data_columns = ['Name', 'Vorname', 'E-Mail', 'Kategorie', 'Typ', 'Nr']
     date_columns = ['Geburtsdatum', 'Ab', 'Bis']
 
@@ -343,13 +350,16 @@ def parse_licenses_from_excel(excel: bytes | BinaryIO) -> list[dict[str, any]]:
     for date_column in date_columns:
         df[date_column] = df[date_column].dt.date
 
-    return df.to_dict(orient='records')
+    return cast(list[dict[str, Any]], df.to_dict(orient='records'))
 
 
-def parse_registrations_from_html(raw_html: bytes) -> list[dict[str, any]]:
+def parse_registrations_from_html(raw_html: bytes) -> list[dict[str, Any]]:
     soup = BeautifulSoup(raw_html, 'html.parser')
-    rows = soup.find('table').find_all('tr')
-
+    table = soup.find('table')
+    if not table:
+        raise ValueError("Could not find registrations table in HTML")
+    
+    rows = table.find_all('tr')
     if rows and "keine Anmeldungen für Lehrgänge im angegebenen Zeitraum gefunden" in rows[0].get_text():
         return []
 
@@ -377,7 +387,7 @@ def parse_registrations_from_html(raw_html: bytes) -> list[dict[str, any]]:
             aid = None
             link_tag = columns[-1].find('a', href=True)
             if link_tag:
-                query = urlparse(link_tag['href']).query
+                query = urlparse(str(link_tag['href'])).query
                 aid = parse_qs(query).get('aid', [None])[0]
 
             if not aid:
@@ -415,7 +425,9 @@ def normalize_course(raw: dict[str, str]) -> Course:
         raise ValueError(f"course type {type_raw} is not valid.")
 
     start, end = parse_date_period(raw['Datum'])
+    assert start is not None and end is not None, "could not parse start and end date from raw data"
     reg_start, reg_end = parse_date_period(raw['Anmeldezeitraum'])
+    assert reg_start is not None and reg_end is not None, "could not parse registration start and end date from raw data"
 
     # license_category
     if 'Beach' in type_raw:
@@ -453,7 +465,7 @@ def normalize_course(raw: dict[str, str]) -> Course:
 
     free_space = normalize_space(raw['freie Plätze'])
     granted_space = normalize_space(raw['davon sofort verfügbar'])
-    waiting_count = normalize_space(raw.get('auf Warteliste', raw.get('Warteliste')))
+    waiting_count = normalize_space(raw.get('auf Warteliste', raw['Warteliste']))
 
     # deep info
     deregister_end = raw.get('Abmeldeschluss')
@@ -483,7 +495,7 @@ def normalize_course(raw: dict[str, str]) -> Course:
     )
 
 
-def normalize_registration(raw: dict[str, any]) -> Registration:
+def normalize_registration(raw: dict[str, Any]) -> Registration:
     identity = PersonIdentity(
         last_name=raw['Name'],
         first_name=raw['Vorname'],
@@ -529,7 +541,7 @@ def normalize_registration(raw: dict[str, any]) -> Registration:
     )
 
 
-def normalize_license(raw: dict[str, any], excel: bool = True) -> Referee:
+def normalize_license(raw: dict[str, Any], excel: bool = True) -> Referee:
     if not excel:
         raise NotImplementedError("licenses from html are not implemented")
 

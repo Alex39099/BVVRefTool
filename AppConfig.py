@@ -2,12 +2,13 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
 
 
 class FromDictMixin:
     @classmethod
-    def from_dict(cls, data: dict) -> "FromDictMixin":
-        return cls(**data)  # type: ignore[call-arg]
+    def from_dict(cls, data: dict) -> Self:
+        return cls(**data)
 
 
 @dataclass(frozen=True)

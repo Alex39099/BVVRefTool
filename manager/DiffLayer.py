@@ -1,7 +1,7 @@
 #  Copyright (c) 2026. Alexander Schmid
 from dataclasses import dataclass
 from enum import Enum
-from typing import TypeVar, Generic, List, Callable
+from typing import Any, TypeVar, Generic, List, Callable
 
 T = TypeVar("T")
 
@@ -17,11 +17,11 @@ class ChangeEvent(Generic[T]):
     type: ChangeEventType
     before: T | None  # None for ADDED
     after: T | None  # None for REMOVED
-    key: any  # identifier for the object (e.g., id, identity)
+    key: Any  # identifier for the object (e.g. id, identity)
 
 
-class DiffLayer:
-    def __init__(self, key_func: Callable[[T], any]):
+class DiffLayer(Generic[T]):
+    def __init__(self, key_func: Callable[[T], Any]):
         """
         :param key_func: function to extract unique key from an object
         """
@@ -52,9 +52,9 @@ class DiffLayer:
 
         return events
 
-# TODO usage:
-# diff_layer = DiffLayer(key_func=lambda c: c.id)
+# Usage:
+# diff_layer = DiffLayer[Course](key_func=lambda c: c.id)
 # events = diff_layer.diff(old_courses, new_courses)
 #
-# diff_layer = DiffLayer(key_func=lambda r: r.identity)
+# diff_layer = DiffLayer[Referee](key_func=lambda r: r.identity)
 # events = diff_layer.diff(old_referees, new_referees)

@@ -36,7 +36,7 @@ def authorize(oauth_file_path: Path | str | None, token_file_path: Path | str = 
         with open(token_file_path, "w") as token:
             token.write(creds.to_json())
 
-    return creds
+    return creds # type: ignore
 
 
 def read_spreadsheet_data(spreadsheet_id: str, range_name: str, credentials: Credentials):
@@ -55,3 +55,4 @@ def read_spreadsheet_data(spreadsheet_id: str, range_name: str, credentials: Cre
     except HttpError as e:
         logger.error(f"Could not load spreadsheet data for spreadsheet_id {spreadsheet_id} and range {range_name}")
         logger.exception(e)
+        raise e
