@@ -6,3 +6,4 @@ gc_token.json
 gc_token_py.json
 /logs/
 ref_management_db.sql
+/testing/
