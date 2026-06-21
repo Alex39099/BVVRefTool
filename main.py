@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from AppConfig import AppConfig
 from helper import GoogleSheets
 from helper.Mailing import MailConstructor, Mailer
-from manager.BVVTools import BVVScraper, parse_courses_from_html, normalize_course
+from manager.BVVTools import BVVClient, parse_courses_from_html, normalize_course
 from manager.Data import Course
 from manager.DiffLayer import DiffLayer, ChangeEventType
 from manager.Storage import SnapshotRepository, SnapshotSource, ScraperRunningStatus
@@ -32,7 +32,7 @@ logger.setLevel(logging.DEBUG)
 
 
 def scrape_and_save_data(db_path: str, config: AppConfig) -> tuple[int, datetime]:
-    scraper = BVVScraper.from_config(config)
+    scraper = BVVClient.from_config(config)
     snapshot_rep = SnapshotRepository(db_path)
 
     run_id, collected_at = snapshot_rep.create_run()

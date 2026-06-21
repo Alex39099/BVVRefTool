@@ -103,7 +103,7 @@ class BVVSession(requests.Session):
 
 
 @dataclass
-class BVVScraper:
+class BVVClient:
 
     credentials: InitVar[tuple[str, str]]
     club_id: str = "555"  # TSV Haunstetten
@@ -111,7 +111,7 @@ class BVVScraper:
     request_min_throttle: float = 5.0
 
     @classmethod
-    def from_config(cls, config: AppConfig) -> "BVVScraper":
+    def from_config(cls, config: AppConfig) -> "BVVClient":
         return cls(
             credentials=(config.bvv.username, config.bvv.password),
             club_id=config.bvv.club_id
