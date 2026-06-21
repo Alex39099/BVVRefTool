@@ -70,8 +70,8 @@ class BVVSession(requests.Session):
         self._last_request_time = time.time()
 
         # detect silent session expiry
-        if response.status_code != 200 or "core_login" in response.url.lower():
-            raise RuntimeError("Session expired or invalid response")
+        if "core_login" in response.url.lower():
+            raise RuntimeError("Session expired - redirect to login page")
         return response
 
     def __enter__(self):
