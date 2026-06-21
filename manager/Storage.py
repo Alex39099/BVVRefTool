@@ -1,4 +1,5 @@
 #  Copyright (c) 2026. Alexander Schmid
+from pathlib import Path
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -27,8 +28,8 @@ class Snapshot:
 
 
 class SnapshotRepository:
-    def __init__(self, db_path: str):
-        self.db_path = db_path
+    def __init__(self, db_path: str | Path):
+        self.db_path = Path(db_path)
         self._init_db()
 
     def _get_connection(self):
