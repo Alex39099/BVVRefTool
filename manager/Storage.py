@@ -16,6 +16,7 @@ class SnapshotSource(StrEnum):
     BVV_LICENSES_EXCEL = "BVV_Licenses_Excel"
     BVV_REGISTRATIONS = "BVV_Registrations"
     BVV_COURSES = "BVV_Courses"
+    BVV_MEMBERS = "BVV_Members"
 
 
 @dataclass(frozen=True)
