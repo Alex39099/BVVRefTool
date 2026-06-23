@@ -93,17 +93,20 @@ class MailConstructor:
 @dataclass(frozen=True)
 class Mailer:
     smtp_settings: SMTPSettings | None  # use None for debugging
+    debug: bool = False
 
     def send_mail(self, msg: EmailMessage | MailConstructor, send_separately: bool = False):
         if isinstance(msg, MailConstructor):
             msg = msg.get_mail()
 
         main_recipients = [(name, addr) for name, addr in getaddresses(msg.get_all("To", []))]
+        
+        if self.debug:
+            logger.info(f"[DEBUG] would send mail to {main_recipients} (excluding cc, bcc): {msg}")
+            return
 
         if self.smtp_settings is None:
-            logger.warning("smtp_settings are None, not actually sending mails...")
-            logger.info(f"sent mail to {main_recipients} (excluding cc, bcc): {msg}")
-            return
+            raise ValueError("smtp_settings must be provided when not in debug")
 
         with smtplib.SMTP(self.smtp_settings.host, self.smtp_settings.port) as srv:
             srv.ehlo()  # say hello
