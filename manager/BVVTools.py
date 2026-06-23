@@ -19,17 +19,19 @@ from AppConfig import AppConfig
 from manager.Data import RefLicenseCategory, Course, RefLicenseType, Registration, RegistrationStatus, \
     ParticipationStatus, CourseType, RefLicense, PersonIdentity, Referee, Participant, GrantableLicenseCategory, \
     GrantableLicenseType, GrantableLicense
-
+    
+logger = logging.getLogger(__name__)
 
 class BVVSession(requests.Session):
     def __init__(self, username: str, password: str, url_login: str, url_logout: str, min_throttle: float = 5.0):
         super().__init__()
-        self.username = username
-        self.password = password
-        self.url_login = url_login
-        self.url_logout = url_logout
-        self.min_throttle = min_throttle  # seconds
-        self._last_request_time = None
+        self.username: str = username
+        self.password: str  = password
+        self.url_login: str  = url_login
+        self.url_logout: str = url_logout
+        self.min_throttle: float = min_throttle  # seconds
+        self._last_request_time: float | None = None
+        self._relogin_retry: bool = False
 
         # Retry configuration
         retry = Retry(
@@ -45,10 +47,12 @@ class BVVSession(requests.Session):
         self.mount("https://", adapter)
         self.mount("http://", adapter)
 
-        # Disable connection reuse
+        # Disable TCP connection reuse to ensure clean state between requests
         self.headers.update({"Connection": "close"})
 
-    def request(self, method, url, **kwargs): # type: ignore
+    def request(self, method: str, url: str, **kwargs) -> requests.Response:  # type: ignore[override]
+        # requests.Session stub incorrect
+        
         # enforce timeout
         if "timeout" not in kwargs:
             kwargs["timeout"] = 15
@@ -58,45 +62,79 @@ class BVVSession(requests.Session):
             elapsed = time.time() - self._last_request_time
             wait = self.min_throttle - elapsed
             if wait > 0:
-                logging.debug(f"BVV_SESSION: delaying next request by {wait:.2f} seconds...")
+                logger.debug(f"Delaying next request by {wait:.2f} seconds...")
                 time.sleep(wait)
 
         try:
             response = super().request(method, url, **kwargs)
         except requests.exceptions.ConnectionError:
-            logging.warning("BVV_SESSION: connection error, retry handled by adapter")
+            logger.warning("Connection error, retry handled by adapter")
             raise
 
         self._last_request_time = time.time()
 
         # detect silent session expiry
         if "core_login" in response.url.lower():
-            raise RuntimeError("Session expired - redirect to login page")
+            # try to re-login only once
+            if self._relogin_retry:
+                # Second attempt, give up
+                raise RuntimeError("Session expired and re-login failed")
+            
+            logger.warning(f"Session expired (redirect to {response.url}), attempting to re-login...")
+            self._relogin_retry = True
+            try:
+                self._relogin()
+                response = self.request(method, url, **kwargs)  # retry original request recursively
+            finally:
+                self._relogin_retry = False  # reset retry flag
+            
         return response
+    
+    def _relogin(self) -> None:
+        """
+            Re-login to the BVV portal.
+            
+            Raises: RuntimeError if re-login fails.
+        """
+        logger.info("session expired, attempting to re-login...")
+        payload = {"username": self.username, "password": self.password}
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        # Use super().request() directly to bypass the overridden request() and avoid
+        # triggering the core_login check or throttle logic recursively
+        response = super().request(
+            "POST",
+            self.url_login,
+            data=payload,
+            headers=headers,
+            timeout=15,
+        )
+
+        if response.status_code != 200 or "core_login" in response.url.lower():
+            raise RuntimeError("Re-login rejected")
+
+        logger.info("Re-login successful")
 
     def __enter__(self):
         payload = {"username": self.username, "password": self.password}
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
         response = self.post(self.url_login, data=payload, headers=headers)
-        if response.status_code != 200:
-            logging.error("BVV_SCALPER: login failed")
+        if response.status_code != 200 or "core_login" in response.url.lower():
+            logger.error("Login failed")
             raise RuntimeError("Login failed")
 
-        if "core_login" in response.url.lower():
-            raise RuntimeError("Login rejected (still on login page)")
-
-        logging.info("BVV_SCALPER: logged in")
+        logger.info("Logged in")
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb): # type: ignore
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool | None:  # type: ignore[override]
+        # requests.Session stub incorrect
         try:
             response = self.post(self.url_logout)
             if response.status_code != 200:
-                logging.error("BVV_SCALPER: logout failed")
+                logger.error("Logout failed")
             else:
-                logging.info("BVV_SCALPER: logged out")
+                logger.info("Logged out")
         except Exception as e:
-            logging.exception(f"BVV_SCALPER: logout exception: {e}")
+            logger.exception(f"Logout exception: {e}")
         finally:
             self.close()
         return False  # propagate exceptions from the block
@@ -126,6 +164,7 @@ class BVVClient:
         self.url_license_get = "https://bvv.volley.de/portal/sw_verein_scheine!browse.action?vereinsid=" + self.club_id
         self.url_license_action = "https://bvv.volley.de/portal/sw_verein_scheine.action"
         self.url_license_excel_action = "https://bvv.volley.de/portal/sw_verein_scheine!execute.action"
+        self.url_member_get = "https://bvv.volley.de/portal/verein_verein_mitglieder!browse.action?vereinsid=" + self.club_id
         # self.url_person_search_get = "https://bvv.volley.de/portal/verein_verein_person!browse.action?vereinsid=" + self.club_id
         # self.url_person_search_action = "https://bvv.volley.de/portal/verein_verein_personen.action"
         self.url_course_get = "https://bvv.volley.de/portal/sw_verein_lehrgaenge!browse.action?vereinsid=" + self.club_id
@@ -241,6 +280,16 @@ class BVVClient:
             contents[course_id] = response.content
 
         return contents
+    
+    def scrape_members(self, session: BVVSession) -> bytes:
+        """
+        Scrape all members of the club
+        :param session: the BVVSession
+        :return: content of the BVV response
+        """
+        response = session.get(self.url_member_get)
+        response.raise_for_status()
+        return response.content
 
 # ====================================================================================================================
 # ====================================================================================================================
@@ -406,6 +455,9 @@ def parse_registrations_from_html(raw_html: bytes) -> list[dict[str, Any]]:
 
     return registrations
 
+def parse_members_from_html(raw_html: bytes) -> list[dict[str, Any]]:
+    raise NotImplementedError(raw_html)
+
 # ====================================================================================================================
 # ====================================================================================================================
 # ====================================================================================================================
@@ -462,6 +514,9 @@ def normalize_course(raw: dict[str, str]) -> Course:
         )
     else:
         raise ValueError(f"could not parse license_type_raw from Typ: {type_raw}")
+    
+    def normalize_space(raw_granted_space: str) -> int:
+        return int(raw_granted_space) if raw_granted_space.isnumeric() else 0
 
     free_space = normalize_space(raw['freie Plätze'])
     granted_space = normalize_space(raw['davon sofort verfügbar'])
@@ -569,10 +624,6 @@ def normalize_license(raw: dict[str, Any], excel: bool = True) -> Referee:
         identity=identity,
         license=ref_license
     )
-
-
-def normalize_space(raw_granted_space: str) -> int:
-    return int(raw_granted_space) if raw_granted_space.isnumeric() else 0
 
 
 def parse_date_period(period: str | None) -> tuple[date | None, date | None]:
