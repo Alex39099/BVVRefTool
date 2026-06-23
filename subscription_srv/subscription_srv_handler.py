@@ -36,7 +36,7 @@ class SubscriptionService:
     @classmethod
     def from_config(cls, config: AppConfig, gc_credentials: Credentials) -> "SubscriptionService":
         return cls(
-            mailer=Mailer(config.smtp),
+            mailer=Mailer(config.smtp, debug=config.debug),
             from_mail=config.subscription.from_mail,
             spreadsheet_id=config.subscription.spreadsheet_id,
             gc_credentials=gc_credentials,

@@ -74,6 +74,7 @@ class AppConfig:
     smtp: SMTPSettings
     google_sheets: GoogleSheetsSettings
     subscription: SubscriptionSettings
+    debug: bool = False
 
     @classmethod
     def from_file(cls, config_path: str | Path) -> "AppConfig":
@@ -82,6 +83,7 @@ class AppConfig:
         config = json.loads(config_path.read_text(encoding='utf-8'))
 
         return cls(
+            debug=config.get('debug', False),
             general=GeneralSettings.from_dict(config['general']),
             bvv=BVVSettings.from_dict(config['bvv_credentials']),
             smtp=SMTPSettings.from_dict(config['smtp_credentials']),
