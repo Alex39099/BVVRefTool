@@ -54,7 +54,8 @@ class RefLicense:
 class PersonIdentity:
     first_name: str
     last_name: str
-    birth_date: date
+    birth_date: date | None = None
+    id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -455,8 +455,48 @@ def parse_registrations_from_html(raw_html: bytes) -> list[dict[str, Any]]:
 
     return registrations
 
-def parse_members_from_html(raw_html: bytes) -> list[dict[str, Any]]:
-    raise NotImplementedError(raw_html)
+def parse_members_from_html(raw_html: bytes) -> list[dict[str, str | bool]]:
+    soup = BeautifulSoup(raw_html, "html.parser")
+    table = soup.find("table", class_="portaltable")
+    if not table:
+        raise ValueError("Could not find members table in HTML")
+    
+    members: list[dict[str, str | bool]] = []
+    
+    def _has_tick(cell) -> bool:
+        tick_img = cell.find("img")
+        if tick_img is None:
+            return False
+        src = tick_img.get("src", "")
+        return "tick.png" in src
+    
+    for row in table.find_all('tr'):
+        cells = row.find_all('td')
+        
+        if len(cells) < 8:
+            logger.debug(f"Skipping row with {len(cells)} cells, expected at least 8")
+            continue
+        
+        user_id_input = cells[7].find("input", {"name": "userId"})
+        if user_id_input is None: 
+            logger.warning(f"No userId input found in action cell for row {row}")
+            continue
+        
+        member = {
+            'Name': cells[0].get_text(strip=True),
+            'Vorname': cells[1].get_text(strip=True),
+            'Spielerpass': _has_tick(cells[2]),
+            'Schiedsrichter': _has_tick(cells[3]),
+            'Teamfunktionär': _has_tick(cells[4]),
+            'Vereinsfunktionär': _has_tick(cells[5]),
+            'Manuelle Freigabe': _has_tick(cells[6]),
+            'Id': user_id_input.get("value")
+        }
+        
+        members.append(member)
+        
+    return members
+
 
 # ====================================================================================================================
 # ====================================================================================================================
@@ -624,7 +664,13 @@ def normalize_license(raw: dict[str, Any], excel: bool = True) -> Referee:
         identity=identity,
         license=ref_license
     )
-
+    
+def normalize_member(raw: dict[str, str | bool]) -> PersonIdentity:
+    return PersonIdentity(
+        first_name=str(raw['Vorname']),
+        last_name=str(raw['Name']),
+        id=str(raw['Id'])
+    )
 
 def parse_date_period(period: str | None) -> tuple[date | None, date | None]:
     """
