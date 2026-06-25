@@ -104,7 +104,7 @@ class Course:
     id: str
     district: str
     label: str
-    type: str
+    type: CourseType
     date_start: date
     date_end: date
     grantable_licenses: frozenset[GrantableLicense]
@@ -246,8 +246,8 @@ class Registration:
     id: str
     participant: Participant
     course_label: str
-    registration_status: str
-    participation_status: str
+    registration_status: RegistrationStatus
+    participation_status: ParticipationStatus
     waiting_position: int
 
     def __post_init__(self):
