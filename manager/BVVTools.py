@@ -13,6 +13,7 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
+import urllib.parse
 from urllib3 import Retry
 
 from AppConfig import AppConfig
@@ -156,22 +157,30 @@ class BVVClient:
         )
 
     def __post_init__(self, credentials: tuple[str, str]):
-        self.username = credentials[0]
-        self.password = credentials[1]
+        self.username: str = credentials[0]
+        self.password: str = credentials[1]
 
-        self.url_login = "https://bvv.volley.de/portal/core_login.action"
-        self.url_logout = "https://bvv.volley.de/portal/core_logout.action"
-        self.url_license_get = "https://bvv.volley.de/portal/sw_verein_scheine!browse.action?vereinsid=" + self.club_id
-        self.url_license_action = "https://bvv.volley.de/portal/sw_verein_scheine.action"
-        self.url_license_excel_action = "https://bvv.volley.de/portal/sw_verein_scheine!execute.action"
-        self.url_member_get = "https://bvv.volley.de/portal/verein_verein_mitglieder!browse.action?vereinsid=" + self.club_id
-        # self.url_person_search_get = "https://bvv.volley.de/portal/verein_verein_person!browse.action?vereinsid=" + self.club_id
-        # self.url_person_search_action = "https://bvv.volley.de/portal/verein_verein_personen.action"
-        self.url_course_get = "https://bvv.volley.de/portal/sw_verein_lehrgaenge!browse.action?vereinsid=" + self.club_id
-        self.url_course_action = "https://bvv.volley.de/portal/sw_verein_lehrgaenge.action"
-        self.url_course_deep_get = "https://bvv.volley.de/portal/sw_verein_lehrgang!browse.action?vereinsid=" + self.club_id
-        # self.url_registration_get = "https://bvv.volley.de/portal/sw_verein_anmeldungen!browse.action?vereinsid=" + self.club_id
-        self.url_registration_action = "https://bvv.volley.de/portal/sw_verein_anmeldungen.action"
+        self.url_login: str = "https://bvv.volley.de/portal/core_login.action"
+        self.url_logout: str = "https://bvv.volley.de/portal/core_logout.action"
+        
+        self.url_license_get: str = "https://bvv.volley.de/portal/sw_verein_scheine!browse.action?vereinsid=" + self.club_id
+        self.url_license_action: str = "https://bvv.volley.de/portal/sw_verein_scheine.action"
+        self.url_license_excel_action: str = "https://bvv.volley.de/portal/sw_verein_scheine!execute.action"
+        
+        self.url_member_get: str = "https://bvv.volley.de/portal/verein_verein_mitglieder!browse.action?vereinsid=" + self.club_id
+        self.url_course_get: str = "https://bvv.volley.de/portal/sw_verein_lehrgaenge!browse.action?vereinsid=" + self.club_id
+        self.url_course_action: str = "https://bvv.volley.de/portal/sw_verein_lehrgaenge.action"
+        self.url_course_deep_get: str = "https://bvv.volley.de/portal/sw_verein_lehrgang!browse.action?vereinsid=" + self.club_id
+
+        self.url_registration_action: str = "https://bvv.volley.de/portal/sw_verein_anmeldungen.action"
+        
+        self.url_register_init: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldunginit.action"
+        self.url_register_type_get: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldunglehrgangstypauswahl!input.action"
+        self.url_register_type_action: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldunglehrgangstypauswahl.action"
+        self.url_register_course_get: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldunglehrgangsauswahl!input.action"
+        self.url_register_course_action: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldunglehrgangsauswahl.action"
+        self.url_register_save_get: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldungsave!input.action"
+        self.url_register_save_action: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldungsave.action"
 
     def get_session(self) -> BVVSession:
         """
@@ -290,6 +299,136 @@ class BVVClient:
         response = session.get(self.url_member_get)
         response.raise_for_status()
         return response.content
+    
+    def register_person_to_course(self, session: BVVSession, course_id: str, course_type_raw: str, user_id: str) -> None:
+        # Step 1: POST init action -> expect 302, extract conversationid
+        step1_data = {
+            "userid": user_id,
+            "vereinsid": self.club_id,
+            "tmpimage.x": 3,
+            "tmpimage.y": 9,
+        }
+        
+        logger.debug(f"Step 1: POST {self.url_register_init} with data {step1_data}")
+        step1_response = session.post(self.url_register_init, data=step1_data, allow_redirects=False)
+        
+        if step1_response.status_code != 302:
+            raise RuntimeError(
+                f"Step 1 failed: Expected 302 redirect, got {step1_response.status_code} "
+                f"for POST {self.url_register_init} with data {step1_data}"
+            )
+            
+        location_header = step1_response.headers.get("Location")
+        if not location_header:
+            raise RuntimeError(
+                f"Step 1 failed: No Location header found in response for POST {self.url_register_init} with data {step1_data}. "
+                f"Response headers: {step1_response.headers}"
+            )
+        
+        def extract_conversationid(location_header: str) -> str:
+            parsed = urllib.parse.urlparse(location_header)
+            query_params = urllib.parse.parse_qs(parsed.query)
+
+            conversationid_list = query_params.get("conversationid")
+            if not conversationid_list or not conversationid_list[0]:
+                raise RuntimeError(
+                    f"Could not extract 'conversationid' from Location header: '{location_header}'"
+                )
+
+            return conversationid_list[0]
+        
+        conversationid = extract_conversationid(location_header)
+        logger.info(f"Step 1 complete: conversationid = {conversationid}")
+        
+        # Step 2: GET course type selection page -> expect 200, extract lehrgangstypid
+        step2_url = f"{self.url_register_type_get}?conversationid={conversationid}"
+        logger.debug(f"Step 2: GET {step2_url}")
+        step2_response = session.get(step2_url)
+        step2_response.raise_for_status()
+        
+        def extract_lehrgangstypid(content: bytes, course_type_raw: str) -> str:
+            soup = BeautifulSoup(content, 'html.parser')
+            table = soup.find('table', {'class': 'portaltable'})
+            
+            if table is None:
+                raise ValueError("Could not find available course table in HTML")
+            
+            available_type_labels = []
+            for row in table.find_all('tr'):
+                cells = row.find_all('td')
+                if len(cells) < 4:
+                    logger.debug(f"Skipping row with {len(cells)} cells, expected at least 4")
+                    continue
+                type_label = cells[2].get_text(strip=True)
+                available_type_labels.append(type_label)
+                if type_label.lower() != course_type_raw.lower():
+                    continue
+                # Matched - check if selectable
+                radio_button = cells[0].find('input', {'type': 'radio', 'name': 'lehrgangstypid'})
+                if not radio_button:
+                    raise ValueError(f"Course_type '{course_type_raw}' rejected for user_id '{user_id}' by BVV website.")
+                return str(radio_button['value'])
+            
+            raise ValueError(
+                f"Course type '{course_type_raw}' not found in available types: {available_type_labels}."
+            )
+                
+        course_type_id = extract_lehrgangstypid(step2_response.content, course_type_raw)
+        logger.info(f"Step 2 complete: course_type_id = {course_type_id} for course_type_raw = '{course_type_raw}'")
+        
+        # Step 3: POST course type selection -> expect 302
+        step3_data = {
+            "conversationid": conversationid,
+            "lehrgangstypid": course_type_id,
+        }
+        logger.debug(f"Step 3: POST {self.url_register_type_action} with data {step3_data}")
+        step3_response = session.post(self.url_register_type_action, data=step3_data, allow_redirects=False)
+        if step3_response.status_code != 302:
+            raise RuntimeError(
+                f"Step 3 failed: Expected 302 redirect, got {step3_response.status_code} "
+                f"for POST {self.url_register_type_action} with data {step3_data}"
+            )
+        logger.info("Step 3 complete: course type selection submitted successfully")
+        
+        # Step 4: GET course selection page -> expect 200
+        step4_url = f"{self.url_register_course_get}?conversationid={conversationid}"
+        logger.debug(f"Step 4: GET {step4_url}")
+        step4_response = session.get(step4_url)
+        step4_response.raise_for_status()
+        logger.info("Step 4 complete: course selection page retrieved successfully")
+        
+        # Step 5: POST course selection -> expect 302
+        step5_data = {
+            "conversationid": conversationid,
+            "lehrgangid": course_id
+        }
+        logger.debug(f"Step 5: POST {self.url_register_course_action} with data {step5_data}")
+        step5_response = session.post(self.url_register_course_action, data=step5_data, allow_redirects=False)
+        if step5_response.status_code != 302:
+            raise RuntimeError(
+                f"Step 5 failed: Expected 302 redirect, got {step5_response.status_code} "
+                f"for POST {self.url_register_course_action} with data {step5_data}"
+            )
+        logger.info("Step 5 complete: course selection submitted successfully")
+        
+        # Step 6: GET save confirmation page -> expect 200
+        step6_url = f"{self.url_register_save_get}?conversationid={conversationid}"
+        logger.debug(f"Step 6: GET {step6_url}")
+        step6_response = session.get(step6_url)
+        step6_response.raise_for_status()
+        logger.info("Step 6 complete: save confirmation page retrieved successfully")
+        
+        # Step 7: POST save (finalize registration) -> expect 200
+        step7_data = {
+            "conversationid": conversationid,
+        }
+        logger.debug(f"Step 7: POST {self.url_register_save_action} with data {step7_data}")
+        step7_response = session.post(self.url_register_save_action, data=step7_data)
+        step7_response.raise_for_status()
+        logger.info("Step 7 complete: registration finalized successfully")
+        
+        logger.info(f"Registration process completed successfully for user_id = {user_id}, course_id = {course_id}, course_type_raw = '{course_type_raw}'")
+
 
 # ====================================================================================================================
 # ====================================================================================================================
