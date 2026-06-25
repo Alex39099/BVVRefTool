@@ -44,6 +44,7 @@ def scrape_and_save_data(db_path: str, config: AppConfig) -> tuple[int, datetime
             scraped_data[SnapshotSource.BVV_COURSES] = scraper.scrape_courses(session)
             scraped_data[SnapshotSource.BVV_REGISTRATIONS] = scraper.scrape_registrations(session)
             scraped_data[SnapshotSource.BVV_LICENSES_EXCEL] = scraper.scrape_licenses_excel(session)
+            scraped_data[SnapshotSource.BVV_MEMBERS] = scraper.scrape_members(session)
         logger.info(f"all data was scraped for run_id {run_id}")
     except Exception as e:
         logger.error(f"Failed to scrape data for run_id {run_id} because {e}")
