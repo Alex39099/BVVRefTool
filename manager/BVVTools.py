@@ -713,6 +713,7 @@ def normalize_course(raw: dict[str, str]) -> Course:
         district=raw['Bereich'],
         label=label,
         type=type,
+        type_raw=type_raw,
         date_start=start,
         date_end=end,
         grantable_licenses=grantable_licenses,

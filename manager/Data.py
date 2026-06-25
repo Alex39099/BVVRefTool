@@ -105,6 +105,7 @@ class Course:
     district: str
     label: str
     type: CourseType
+    type_raw: str
     date_start: date
     date_end: date
     grantable_licenses: frozenset[GrantableLicense]
