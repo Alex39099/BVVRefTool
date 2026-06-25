@@ -301,6 +301,18 @@ class BVVClient:
         return response.content
     
     def register_person_to_course(self, session: BVVSession, course_id: str, course_type_raw: str, user_id: str) -> None:
+        """Registers a person to a course on the BVV site
+
+        Args:
+            session (BVVSession): the BVVSession
+            course_id (str): the course id (lid) to register for
+            course_type_raw (str): the raw course type as displayed on the BVV site, e.g. D-Ausbildung
+            user_id (str): the user id to register
+
+        Raises:
+            RuntimeError: If a response status code is unexpected or if the registration fails at any step.
+            ValueError: If the course type cannot be matched or is not applicaple for this user.
+        """
         # Step 1: POST init action -> expect 302, extract conversationid
         step1_data = {
             "userid": user_id,
