@@ -174,13 +174,16 @@ class BVVClient:
 
         self.url_registration_action: str = "https://bvv.volley.de/portal/sw_verein_anmeldungen.action"
         
-        self.url_register_init: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldunginit.action"
+        self.url_register_single_init: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldunginit.action"
+        self.url_register_ref_init: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldunginit"
         self.url_register_type_get: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldunglehrgangstypauswahl!input.action"
         self.url_register_type_action: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldunglehrgangstypauswahl.action"
         self.url_register_course_get: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldunglehrgangsauswahl!input.action"
         self.url_register_course_action: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldunglehrgangsauswahl.action"
         self.url_register_save_get: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldungsave!input.action"
         self.url_register_save_action: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldungsave.action"
+        
+        self.url_deregister_action: str = "https://bvv.volley.de/portal/sw_verein_anmeldungabmelden!execute.action"
 
     def get_session(self) -> BVVSession:
         """
@@ -300,40 +303,112 @@ class BVVClient:
         response.raise_for_status()
         return response.content
     
-    def register_person_to_course(self, session: BVVSession, course_id: str, course_type_raw: str, user_id: str) -> None:
-        """Registers a person to a course on the BVV site
+    def register_person_to_course(self, session: BVVSession, course_id: str, course_type_raw: str, user_id: str) -> tuple[str, str]:
+        """Registers a person to a course on the BVV site.
 
         Args:
-            session (BVVSession): the BVVSession
-            course_id (str): the course id (lid) to register for
-            course_type_raw (str): the raw course type as displayed on the BVV site, e.g. D-Ausbildung
-            user_id (str): the user id to register
+            session (BVVSession): the BVVSession.
+            course_id (str): the course id (lid) to register for.
+            course_type_raw (str): the raw course type as displayed on the BVV site, e.g. D-Ausbildung.
+            user_id (str): the user id to register.
 
         Raises:
             RuntimeError: If a response status code is unexpected or if the registration fails at any step.
             ValueError: If the course type cannot be matched or is not applicaple for this user.
+
+        Returns:
+            tuple[str, str]: (last_name, first_name) of the registered person
         """
-        # Step 1: POST init action -> expect 302, extract conversationid
-        step1_data = {
-            "userid": user_id,
-            "vereinsid": self.club_id,
-            "tmpimage.x": 3,
-            "tmpimage.y": 9,
-        }
+        logger.debug(
+            f"Starting registration process for course_id {course_id}, course_type_raw {course_type_raw} and user_id {user_id}."
+        )
+        participants = self._execute_registration_flow(
+            session=session,
+            course_id=course_id,
+            course_type_raw=course_type_raw,
+            init_request_url=self.url_register_single_init,
+            init_request_data={
+                "userid": user_id,
+                "vereinsid": self.club_id,
+                "tmpimage.x": 3,
+                "tmpimage.y": 9,
+            }
+        )
         
-        logger.debug(f"Step 1: POST {self.url_register_init} with data {step1_data}")
-        step1_response = session.post(self.url_register_init, data=step1_data, allow_redirects=False)
+        return participants[0]
+        
+    def register_referees_to_course(self, session: BVVSession, course_id: str, course_type_raw: str, referee_license_ids: list[str]) -> list[tuple[str, str]]:
+        """Registers multiple persons by referee license id to a course on the BVV site.
+
+        Args:
+            session (BVVSession): the BVVSession.
+            course_id (str): the course id (lid) to register for.
+            course_type_raw (str): the raw course type as displayed on the BVV site, e.g. D-Ausbildung.
+            referee_license_ids (list[str]): list of referee license ids from the BVV site.
+            
+        Raises:
+            RuntimeError: If a response status code is unexpected or if the registration fails at any step.
+            ValueError: If the course type cannot be matched or is not applicaple for any referee license id.
+
+        Returns:
+            list[tuple[str, str]]: list of registered persons (last_name, first_name). This might differ from the input since a course must be applicable.
+        """
+        logger.debug(
+            f"Starting registration process for course_id {course_id}, course_type_raw {course_type_raw}. "
+            f"Referee License Ids: {referee_license_ids}"
+        )
+        
+        init_request_data = [
+            ("vereinsid", self.club_id),
+            ("printfoto", "0"),
+            *((f"scheine[{ref_id}]", "on") for ref_id in referee_license_ids)
+        ]
+        
+        return self._execute_registration_flow(
+            session=session,
+            course_id=course_id,
+            course_type_raw=course_type_raw,
+            init_request_url=self.url_register_ref_init,
+            init_request_data=init_request_data
+        )
+    
+    def _execute_registration_flow(self, session: BVVSession, 
+                                   init_request_url: str, init_request_data: dict[str, Any] | list[tuple[str, str]], 
+                                   course_id: str, course_type_raw: str) -> list[tuple[str, str]]:
+        """Registers a person to a course on the BVV site.
+
+        Args:
+            session (BVVSession): the BVVSession.
+            init_request_url (str): the url of the initial POST request.
+            init_request_data (dict[str, Any] | list[tuple[str, str]]): the data for the initial POST request.
+            course_id (str): the course id (lid) to register for.
+            course_type_raw (str): the raw course type as displayed on the BVV site, e.g. D-Ausbildung.
+            user_id (str): the user id to register.
+
+        Raises:
+            RuntimeError: If a response status code is unexpected or if the registration fails at any step.
+            ValueError: If the course type cannot be matched or is not applicaple for any user.
+
+        Returns:
+            list[tuple[str, str]]: list of registered persons (last_name, first_name). This might differ from the input since a course must be applicable.
+        """
+        
+        # Step 1: POST init action -> expect 302, extract conversationid
+        step1_data = init_request_data
+        
+        logger.debug(f"Step 1: POST {init_request_url} with data {step1_data}")
+        step1_response = session.post(init_request_url, data=step1_data, allow_redirects=False)
         
         if step1_response.status_code != 302:
             raise RuntimeError(
                 f"Step 1 failed: Expected 302 redirect, got {step1_response.status_code} "
-                f"for POST {self.url_register_init} with data {step1_data}"
+                f"for POST {init_request_url} with data {step1_data}"
             )
             
         location_header = step1_response.headers.get("Location")
         if not location_header:
             raise RuntimeError(
-                f"Step 1 failed: No Location header found in response for POST {self.url_register_init} with data {step1_data}. "
+                f"Step 1 failed: No Location header found in response for POST {init_request_url} with data {step1_data}. "
                 f"Response headers: {step1_response.headers}"
             )
         
@@ -378,7 +453,7 @@ class BVVClient:
                 # Matched - check if selectable
                 radio_button = cells[0].find('input', {'type': 'radio', 'name': 'lehrgangstypid'})
                 if not radio_button:
-                    raise ValueError(f"Course_type '{course_type_raw}' rejected for user_id '{user_id}' by BVV website.")
+                    raise ValueError(f"Course_type '{course_type_raw}' rejected by BVV website.")
                 return str(radio_button['value'])
             
             raise ValueError(
@@ -421,7 +496,7 @@ class BVVClient:
         available_course_ids = extract_available_course_ids(step4_response.content)
         if course_id not in available_course_ids:
             raise ValueError(
-                f"Course_id '{course_id}' not found in available courses of type '{course_type_raw}' for user_id '{user_id}'. "
+                f"Course_id '{course_id}' not found in available courses of type '{course_type_raw}'. "
                 f"Available course_ids: {available_course_ids}"
             )
         
@@ -443,7 +518,38 @@ class BVVClient:
         logger.debug(f"Step 6: GET {step6_url}")
         step6_response = session.get(step6_url)
         step6_response.raise_for_status()
-        logger.info("Step 6 complete: save confirmation page retrieved successfully")
+        
+        def extract_participants(content: bytes) -> list[tuple[str, str]]:
+            soup = BeautifulSoup(content, "html.parser")
+            participants: list[tuple[str, str]] = []
+            
+            form = soup.find("form", {"id": "sw_verein_lehrgangsanmeldungsave"})
+            if not form:
+                raise ValueError("could not find form in response of step 6")
+            participant_table = form.find("table")  # first table in form
+            if not participant_table:
+                raise ValueError(f"could not find a table in form {form}")
+            for row in participant_table.find_all("tr"):
+                cells = row.find_all("td")
+                if len(cells) < 3:
+                    continue
+                # check remark
+                remark = str(cells[2].get_text(strip=True))
+                if "Spieler wird nicht angemeldet" in remark:
+                    continue
+                
+                last_name = str(cells[0].get_text(strip=True))
+                first_name = str(cells[1].get_text(strip=True))
+                
+                participants.append((last_name, first_name))
+                
+            return participants
+        
+        participants = extract_participants(step6_response.content)
+        logger.info(
+            "Step 6 complete: save confirmation page retrieved successfully. "
+            f"Participants: {participants}"
+        )
         
         # Step 7: POST save (finalize registration) -> expect 200
         step7_data = {
@@ -454,7 +560,29 @@ class BVVClient:
         step7_response.raise_for_status()
         logger.info("Step 7 complete: registration finalized successfully")
         
-        logger.info(f"Registration process completed successfully for user_id = {user_id}, course_id = {course_id}, course_type_raw = '{course_type_raw}'")
+        logger.info(
+            f"Registration process completed successfully for course_id = {course_id}, course_type_raw = '{course_type_raw}'. "
+            f"Participants: {participants}"
+        )
+        
+        return participants
+    
+    def cancel_course_registration(self, session: BVVSession, registration_id: str) -> bytes:
+        """Cancels a course registration on the BVV site.
+
+        Args:
+            registration_id (str): registration id (aid) to be cancelled.
+
+        Returns:
+            bytes: response.content of the POST request.
+        """
+        data = {
+            "vereinsid": self.club_id,
+            "aid": registration_id
+        }
+        response = session.post(self.url_deregister_action, data=data)
+        response.raise_for_status
+        return response.content
 
 
 # ====================================================================================================================
