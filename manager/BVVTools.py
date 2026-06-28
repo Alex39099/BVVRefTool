@@ -410,9 +410,24 @@ class BVVClient:
         logger.info("Step 4 complete: course selection page retrieved successfully")
         
         # Step 5: POST course selection -> expect 302
+        def extract_available_course_ids(content: bytes) -> list[str]:
+            soup = BeautifulSoup(content, 'html.parser')
+            available = [
+                str(inp["value"])
+                for inp in soup.select("input[type='radio'][name='lehrgangsid']")
+            ]
+            return available
+        
+        available_course_ids = extract_available_course_ids(step4_response.content)
+        if course_id not in available_course_ids:
+            raise ValueError(
+                f"Course_id '{course_id}' not found in available courses of type '{course_type_raw}' for user_id '{user_id}'. "
+                f"Available course_ids: {available_course_ids}"
+            )
+        
         step5_data = {
             "conversationid": conversationid,
-            "lehrgangid": course_id
+            "lehrgangsid": course_id
         }
         logger.debug(f"Step 5: POST {self.url_register_course_action} with data {step5_data}")
         step5_response = session.post(self.url_register_course_action, data=step5_data, allow_redirects=False)
