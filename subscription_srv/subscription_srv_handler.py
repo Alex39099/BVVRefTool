@@ -123,6 +123,10 @@ class SubscriptionService:
 
             # send mail to each recipient individually
             for recipient in recipients:
+                if not recipient.active:
+                    logger.info(f"skipping inactive recipient {(recipient.name, recipient.mail)}")
+                    continue
+                
                 try:
                     mail_constructor.html_text = self.build_new_course_mail_html(recipient.mail, course_html)
 
