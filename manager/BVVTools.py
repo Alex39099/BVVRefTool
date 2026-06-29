@@ -184,6 +184,10 @@ class BVVClient:
         self.url_register_save_action: str = "https://bvv.volley.de/portal/sw_verein_lehrgangsanmeldungsave.action"
         
         self.url_deregister_action: str = "https://bvv.volley.de/portal/sw_verein_anmeldungabmelden!execute.action"
+        
+        self.url_reregister_action: str = "https://bvv.volley.de/portal/sw_verein_anmeldungummelden.action"
+        
+        self.url_find_user: str = f"https://bvv.volley.de/portal/verein_rpc_finduser_autocomplete.action?vereinsid={self.club_id}&"
 
     def get_session(self) -> BVVSession:
         """
@@ -302,6 +306,14 @@ class BVVClient:
         response = session.get(self.url_member_get)
         response.raise_for_status()
         return response.content
+    
+    @staticmethod
+    def _check_error_message(content: bytes) -> None:
+        soup = BeautifulSoup(content, "html.parser")
+        error = soup.find("ul", class_="errorMessage")
+        if error:
+            message = error.find("li").get_text(strip=True) # type:ignore
+            raise ValueError(f"Portal rejected the request: {message}")
     
     def register_person_to_course(self, session: BVVSession, course_id: str, course_type_raw: str, user_id: str) -> tuple[str, str]:
         """Registers a person to a course on the BVV site.
@@ -470,6 +482,8 @@ class BVVClient:
         }
         logger.debug(f"Step 3: POST {self.url_register_type_action} with data {step3_data}")
         step3_response = session.post(self.url_register_type_action, data=step3_data, allow_redirects=False)
+        step3_response.raise_for_status()
+        self._check_error_message(step3_response.content)
         if step3_response.status_code != 302:
             raise RuntimeError(
                 f"Step 3 failed: Expected 302 redirect, got {step3_response.status_code} "
@@ -506,6 +520,8 @@ class BVVClient:
         }
         logger.debug(f"Step 5: POST {self.url_register_course_action} with data {step5_data}")
         step5_response = session.post(self.url_register_course_action, data=step5_data, allow_redirects=False)
+        step5_response.raise_for_status()
+        self._check_error_message(step5_response.content)
         if step5_response.status_code != 302:
             raise RuntimeError(
                 f"Step 5 failed: Expected 302 redirect, got {step5_response.status_code} "
@@ -571,6 +587,7 @@ class BVVClient:
         """Cancels a course registration on the BVV site.
 
         Args:
+            session (BVVSession): the BVVSession.
             registration_id (str): registration id (aid) to be cancelled.
 
         Returns:
@@ -581,8 +598,49 @@ class BVVClient:
             "aid": registration_id
         }
         response = session.post(self.url_deregister_action, data=data)
-        response.raise_for_status
+        response.raise_for_status()
         return response.content
+    
+    def change_course_registration(self, session: BVVSession, registration_id: str, user_token: str) -> None:
+        """Change a course registration to a different user.
+
+        Args:
+            session (BVVSession): the BVVSession.
+            registration_id (str): id of the registration (aid) from the BVV site that should be changed.
+            user_token (str): the user's token received by find_user.
+            
+        Raises:
+            ValueError: If the course_registration cannot be changed to this user.
+        """
+        data = {
+            "vereinsid": self.club_id,
+            "aid": registration_id,
+            "type": "search",
+            "person": user_token,
+            "person_widget": user_token
+        }
+        
+        response = session.post(self.url_reregister_action, data=data)
+        response.raise_for_status()
+        self._check_error_message(response.content)
+        
+
+    def find_user(self, session: BVVSession, value: str) -> list[dict[str, str]]:
+        """Find a user on the BVV site.
+
+        Args:
+            session (BVVSession): the BVVSession.
+            value (str): value used for the search, e.g. "Mustermann Max"
+
+        Returns:
+            list[dict[str, str]]: list of results with keys label, value. Usually, they are both the same following "last_name, first_name (%d.%m.%Y) [user_id]"
+        """
+        data = {
+            "term": value
+        }
+        response = session.post(self.url_find_user, data=data)
+        response.raise_for_status()
+        return response.json()
 
 
 # ====================================================================================================================
