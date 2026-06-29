@@ -589,6 +589,9 @@ class BVVClient:
         Args:
             session (BVVSession): the BVVSession.
             registration_id (str): registration id (aid) to be cancelled.
+            
+        Raises:
+            ValueError: If the cancellation is rejected.
 
         Returns:
             bytes: response.content of the POST request.
@@ -599,6 +602,14 @@ class BVVClient:
         }
         response = session.post(self.url_deregister_action, data=data)
         response.raise_for_status()
+        
+        # BVV site gives 200 and no error message, even if the cancellation was not successfull.
+        # Need to check the response's content
+        soup = BeautifulSoup(response.content, "html.parser")
+        abmelden_img = soup.find("img", {"title": "Abmelden"})
+        if abmelden_img and "disabled" in str(abmelden_img.get("src", "")):
+            raise ValueError(f"Cancellation of registration {registration_id} rejected.")
+        
         return response.content
     
     def change_course_registration(self, session: BVVSession, registration_id: str, user_token: str) -> None:
