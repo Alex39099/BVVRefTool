@@ -2,19 +2,29 @@ import logging
 import os
 from pathlib import Path
 
-from google.auth.transport.requests import Request
+from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
+from google.auth.credentials import Credentials as BaseCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 logger = logging.getLogger(__name__)
 
-# If modifying these scopes, delete the token file
+# If modifying these scopes, delete the token file for oauth
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"] # ["https://www.googleapis.com/auth/spreadsheets"]
 
+def authorize(service_account_file: Path | str | None = None, 
+              oauth_file_path: Path | str | None = None, 
+              token_file_path: Path | str = "gc_token.json") -> BaseCredentials:
+    if service_account_file:
+        logger.info("Authorizing using service account credentials...")
+        return _authorize_service_account(service_account_file)
+    logger.info("Authorizing using OAuth credentials...")
+    return _authorize_oauth(oauth_file_path, token_file_path)
 
-def authorize(oauth_file_path: Path | str | None, token_file_path: Path | str = "gc_token.json") -> Credentials:
+def _authorize_oauth(oauth_file_path: Path | str | None, token_file_path: Path | str = "gc_token.json") -> BaseCredentials:
     if not token_file_path:
         raise ValueError("token_file_path is required")
 
@@ -35,11 +45,13 @@ def authorize(oauth_file_path: Path | str | None, token_file_path: Path | str = 
         # Save the credentials for the next run
         with open(token_file_path, "w") as token:
             token.write(creds.to_json())
+    return creds
 
-    return creds # type: ignore
+def _authorize_service_account(service_account_file: Path | str) -> BaseCredentials:
+    return service_account.Credentials.from_service_account_file(service_account_file, scopes=SCOPES)
 
 
-def read_spreadsheet_data(spreadsheet_id: str, range_name: str, credentials: Credentials):
+def read_spreadsheet_data(spreadsheet_id: str, range_name: str, credentials: BaseCredentials) -> list[list[str | int | float | bool]]:
     try:
         service = build("sheets", "v4", credentials=credentials)
         sheet = service.spreadsheets()

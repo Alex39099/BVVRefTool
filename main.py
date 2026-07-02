@@ -127,10 +127,15 @@ def subscription_srv(db_path: str, config: AppConfig):
         return
 
     # Google Sheets credentials
-    gc_credentials = GoogleSheets.authorize(
-        oauth_file_path=config.google_sheets.oauth_client_file_path,
-        token_file_path=config.google_sheets.token_file_path
-    )
+    if config.google_sheets.authorization_type == "service_account":
+        gc_credentials = GoogleSheets.authorize(
+            service_account_file=config.google_sheets.service_account_key_file_path
+        )
+    else:
+        gc_credentials = GoogleSheets.authorize(
+            oauth_file_path=config.google_sheets.oauth_client_file_path,
+            token_file_path=config.google_sheets.token_file_path
+        )
 
     # Subscription Service
     srv = SubscriptionService.from_config(config=config, gc_credentials=gc_credentials)

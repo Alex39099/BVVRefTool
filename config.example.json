@@ -17,8 +17,10 @@
         "password": "CHANGE_TO_YOUR_SETTINGS"
     },
     "google_sheets": {
+        "authorization_type": "CHANGE TO EITHER 'service_account' OR 'oauth'",
+        "service_account_key_file_path": "gc_service_account_key.json",
         "oauth_client_file_path": "gc_credentials.json",
-        "token_file_path": "gc_token.json"
+        "oauth_token_file_path": "gc_token.json"
     },
     "subscription_srv": {
         "from_name": "CHANGE_TO_YOUR_SETTINGS",

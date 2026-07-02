@@ -4,7 +4,7 @@ import hmac
 import logging
 from dataclasses import dataclass
 
-from google.oauth2.credentials import Credentials
+from google.auth.credentials import Credentials
 
 from AppConfig import AppConfig
 from helper.GoogleSheets import read_spreadsheet_data
@@ -56,9 +56,9 @@ class SubscriptionService:
 
         return [
             Recipient(
-                name=row[0],
-                mail=row[1],
-                active=row[2]
+                name=str(row[0]),
+                mail=str(row[1]),
+                active=bool(row[2])
             )
             for row in spreadsheet_data
         ]
@@ -84,7 +84,7 @@ class SubscriptionService:
             unsubscribe_footer=unsubscribe_footer
         )
 
-    def send_new_course_notifications(self, added_courses: list[Course]):
+    def send_new_course_notifications(self, added_courses: list[Course]) -> None:
         if not added_courses:
             logger.info("No courses added")
             return
@@ -136,7 +136,7 @@ class SubscriptionService:
                     logger.error(f"failed to send mail to {(recipient.name, recipient.mail)} because {e}")
 
 
-def make_hmac_token(secret, email):
+def make_hmac_token(secret, email) -> str:
     sig = hmac.new(secret.encode(), email.encode(), hashlib.sha256).hexdigest()
     token = base64.urlsafe_b64encode(f"{email}|{sig}".encode()).decode()
     return token

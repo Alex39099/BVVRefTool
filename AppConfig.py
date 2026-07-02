@@ -33,12 +33,16 @@ class BVVSettings(FromDictMixin):
 
 @dataclass(frozen=True)
 class GoogleSheetsSettings:
+    authorization_type: str
     oauth_client_file_path: Path
     token_file_path: Path
+    service_account_key_file_path: Path
 
     @classmethod
     def from_dict(cls, data: dict, config_dir: Path) -> "GoogleSheetsSettings":
         return cls(
+            authorization_type=data['authorization_type'],
+            service_account_key_file_path=config_dir / data['service_account_key_file_path'],
             oauth_client_file_path=config_dir / data['oauth_client_file_path'],
             token_file_path=config_dir / data['token_file_path']
         )
