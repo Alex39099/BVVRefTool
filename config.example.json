@@ -18,10 +18,14 @@
     },
     "google_credentials": {
         "authorization_type": "CHANGE TO EITHER 'service_account' OR 'oauth'",
-        "service_account_key_file_path": "gc_service_account_key.json",
-        "impersonate_user": "CHANGE_TO_YOUR_SETTINGS",
-        "oauth_client_file_path": "gc_credentials.json",
-        "oauth_token_file_path": "gc_token.json"
+        "service_account_authorization": {
+            "service_account_key_file_path": "gc_service_account_key.json",
+            "impersonate_user": "CHANGE_TO_YOUR_SETTINGS"
+        },
+        "oauth_authorization": {
+            "oauth_client_file_path": "gc_credentials.json",
+            "oauth_token_file_path": "gc_token.json"
+        }
     },
     "subscription_srv": {
         "from_name": "CHANGE_TO_YOUR_SETTINGS",
