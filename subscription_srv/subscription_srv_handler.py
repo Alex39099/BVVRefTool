@@ -118,7 +118,7 @@ class SubscriptionService:
                 from_mail=self.from_mail,
                 subject=f"Neuer SR Lehrgang: {course.label} ({course.city})"
             )
-            course_url = f"{self.course_base_url}?lid={course.id}"
+            course_url = f"{self.course_base_url}{course.id}"
             course_html = course.to_html(skip_empty=True, course_url=course_url, labels=self.i18n)
 
             # send mail to each recipient individually

@@ -26,7 +26,7 @@
         "spreadsheet_id": "CHANGE_TO_YOUR_SETTINGS",
         "unsubscribe_endpoint": "CHANGE_TO_YOUR_SETTINGS",
         "unsubscribe_token_secret": "CHANGE_TO_YOUR_SETTINGS",
-        "course_base_url": "https://bvv.volley.de/portal/sw_personal_lehrgang!browse.action",
+        "course_base_url": "https://volleyball.bayern/schiri/lehrgaenge/lehrgang/lehrgang-",
         "templates": {
             "new_course_mail": "new_course_mail_template.html"
         },
@@ -44,7 +44,7 @@
             "grantable_licenses": "Lizenzstufen",
             "address": "Adresse",
             "remark": "Bemerkung",
-            "portal_link": "Im Portal öffnen"
+            "course_link": "Auf Website öffnen"
         }
     }
 }

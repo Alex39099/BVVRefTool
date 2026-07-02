@@ -176,7 +176,7 @@ class Course:
                 "grantable_licenses": "Grantable Licenses",
                 "address": "Address",
                 "remark": "Remark",
-                "portal_link": "Open in Portal"
+                "course_link": "Open on website"
             }
 
         def fmt(value):
@@ -224,7 +224,7 @@ class Course:
 
          {row(labels["address"], self.address)}
          {row(labels["remark"], self.remark)}
-         {f'<tr><td colspan="2"><a href="{escape(course_url)}">{labels["portal_link"]}</a></td></tr>' if course_url else ""}
+         {f'<tr><td colspan="2"><a href="{escape(course_url)}">{labels["course_link"]}</a></td></tr>' if course_url else ""}
         </table>
         """.strip()
 
