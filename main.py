@@ -19,7 +19,7 @@ import sys
 from datetime import datetime, timezone
 
 from AppConfig import AppConfig
-from helper import GoogleSheets
+from helper import GoogleService
 from helper.Mailing import MailConstructor, Mailer
 from manager.BVVTools import BVVClient, parse_courses_from_html, normalize_course
 from manager.Data import Course
@@ -126,16 +126,8 @@ def subscription_srv(db_path: str, config: AppConfig):
         logger.info("no courses of interest for subscription srv")
         return
 
-    # Google Sheets credentials
-    if config.google_sheets.authorization_type == "service_account":
-        gc_credentials = GoogleSheets.authorize(
-            service_account_file=config.google_sheets.service_account_key_file_path
-        )
-    else:
-        gc_credentials = GoogleSheets.authorize(
-            oauth_file_path=config.google_sheets.oauth_client_file_path,
-            token_file_path=config.google_sheets.token_file_path
-        )
+    # Google credentials
+    gc_credentials = GoogleService.authorize(config.google)
 
     # Subscription Service
     srv = SubscriptionService.from_config(config=config, gc_credentials=gc_credentials)

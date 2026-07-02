@@ -16,9 +16,10 @@
         "username": "CHANGE_TO_YOUR_SETTINGS",
         "password": "CHANGE_TO_YOUR_SETTINGS"
     },
-    "google_sheets": {
+    "google_credentials": {
         "authorization_type": "CHANGE TO EITHER 'service_account' OR 'oauth'",
         "service_account_key_file_path": "gc_service_account_key.json",
+        "impersonate_user": "CHANGE_TO_YOUR_SETTINGS",
         "oauth_client_file_path": "gc_credentials.json",
         "oauth_token_file_path": "gc_token.json"
     },

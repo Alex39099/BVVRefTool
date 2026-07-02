@@ -1,4 +1,6 @@
 #  Copyright (c) 2026. Alexander Schmid
+import dataclasses
+from enum import StrEnum
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,8 +10,9 @@ from typing import Self
 class FromDictMixin:
     @classmethod
     def from_dict(cls, data: dict) -> Self:
-        return cls(**data)
-
+        valid_keys = {f.name for f in dataclasses.fields(cls)}  # type: ignore[arg-type]
+        filtered = {k: v for k, v in data.items() if k in valid_keys}
+        return cls(**filtered)
 
 @dataclass(frozen=True)
 class GeneralSettings(FromDictMixin):
@@ -30,23 +33,55 @@ class BVVSettings(FromDictMixin):
     password: str
     club_id: str
 
-
 @dataclass(frozen=True)
-class GoogleSheetsSettings:
-    authorization_type: str
-    oauth_client_file_path: Path
-    token_file_path: Path
+class GoogleServiceAccountAuthorizationSettings:
     service_account_key_file_path: Path
-
+    impersonate_user: str | None = None
+    
     @classmethod
-    def from_dict(cls, data: dict, config_dir: Path) -> "GoogleSheetsSettings":
+    def from_dict(cls, data: dict, config_dir: Path) -> "GoogleServiceAccountAuthorizationSettings":
         return cls(
-            authorization_type=data['authorization_type'],
             service_account_key_file_path=config_dir / data['service_account_key_file_path'],
-            oauth_client_file_path=config_dir / data['oauth_client_file_path'],
-            token_file_path=config_dir / data['token_file_path']
+            impersonate_user=data.get('impersonate_user')
         )
 
+@dataclass(frozen=True)
+class GoogleOAuthAuthorizationSettings:
+    oauth_client_file_path: Path
+    oauth_token_file_path: Path
+    
+    @classmethod
+    def from_dict(cls, data: dict, config_dir: Path) -> "GoogleOAuthAuthorizationSettings":
+        return cls(
+            oauth_client_file_path=config_dir / data['oauth_client_file_path'],
+            oauth_token_file_path=config_dir / data['oauth_token_file_path']
+        )
+
+class AuthorizationType(StrEnum):
+    SERVICE_ACCOUNT = "service_account"
+    OAUTH = "oauth"
+@dataclass(frozen=True)
+class GoogleSettings:
+    authorization_type: AuthorizationType
+    service_account_authorization: GoogleServiceAccountAuthorizationSettings | None = None
+    oauth_authorization: GoogleOAuthAuthorizationSettings | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict, config_dir: Path) -> "GoogleSettings":
+        authorization_type = AuthorizationType(data['authorization_type'])
+        service_account_settings = data.get('service_account_authorization')
+        oauth_settings = data.get('oauth_authorization')
+        
+        if authorization_type == AuthorizationType.SERVICE_ACCOUNT and not service_account_settings:
+            raise ValueError("service_account_authorization settings are required for service account authorization")
+        if authorization_type == AuthorizationType.OAUTH and not oauth_settings:
+            raise ValueError("oauth_authorization settings are required for oauth authorization")
+        
+        return cls(
+            authorization_type=AuthorizationType(data['authorization_type']),
+            service_account_authorization=GoogleServiceAccountAuthorizationSettings.from_dict(service_account_settings, config_dir) if service_account_settings else None,
+            oauth_authorization=GoogleOAuthAuthorizationSettings.from_dict(oauth_settings, config_dir) if oauth_settings else None
+        )
 
 @dataclass(frozen=True)
 class SubscriptionSettings:
@@ -76,7 +111,7 @@ class AppConfig:
     general: GeneralSettings
     bvv: BVVSettings
     smtp: SMTPSettings
-    google_sheets: GoogleSheetsSettings
+    google: GoogleSettings
     subscription: SubscriptionSettings
     debug: bool = False
 
@@ -91,6 +126,6 @@ class AppConfig:
             general=GeneralSettings.from_dict(config['general']),
             bvv=BVVSettings.from_dict(config['bvv_credentials']),
             smtp=SMTPSettings.from_dict(config['smtp_credentials']),
-            google_sheets=GoogleSheetsSettings.from_dict(config['google_sheets'], config_dir=config_dir),
+            google=GoogleSettings.from_dict(config['google_credentials'], config_dir=config_dir),
             subscription=SubscriptionSettings.from_dict(config['subscription_srv'], template_dir=config_dir)
         )

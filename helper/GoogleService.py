@@ -10,19 +10,41 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from AppConfig import AuthorizationType, GoogleSettings
+
 logger = logging.getLogger(__name__)
 
 # If modifying these scopes, delete the token file for oauth
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"] # ["https://www.googleapis.com/auth/spreadsheets"]
 
-def authorize(service_account_file: Path | str | None = None, 
-              oauth_file_path: Path | str | None = None, 
-              token_file_path: Path | str = "gc_token.json") -> BaseCredentials:
-    if service_account_file:
-        logger.info("Authorizing using service account credentials...")
-        return _authorize_service_account(service_account_file)
-    logger.info("Authorizing using OAuth credentials...")
-    return _authorize_oauth(oauth_file_path, token_file_path)
+def authorize(settings: GoogleSettings) -> BaseCredentials:
+    """Authorize to Google Cloud using either service account or OAuth credentials based on the provided settings.
+
+    Args:
+        settings (GoogleSettings): config settings to use for authorization
+
+    Raises:
+        ValueError: if settings are missing or invalid
+
+    Returns:
+        BaseCredentials: credentials to use with Google APIs
+    """
+    if settings.authorization_type == AuthorizationType.SERVICE_ACCOUNT:
+        if not settings.service_account_authorization:
+            raise ValueError("service_account_authorization settings are required for service account authorization")
+        return _authorize_service_account(
+            settings.service_account_authorization.service_account_key_file_path,
+            settings.service_account_authorization.impersonate_user
+        )
+    elif settings.authorization_type == AuthorizationType.OAUTH:
+        if not settings.oauth_authorization:
+            raise ValueError("oauth_authorization settings are required for oauth authorization")
+        return _authorize_oauth(
+            settings.oauth_authorization.oauth_client_file_path,
+            settings.oauth_authorization.oauth_token_file_path
+        )
+    else:
+        raise ValueError(f"Unknown authorization type: {settings.authorization_type}")
 
 def _authorize_oauth(oauth_file_path: Path | str | None, token_file_path: Path | str = "gc_token.json") -> BaseCredentials:
     if not token_file_path:
@@ -47,11 +69,26 @@ def _authorize_oauth(oauth_file_path: Path | str | None, token_file_path: Path |
             token.write(creds.to_json())
     return creds
 
-def _authorize_service_account(service_account_file: Path | str) -> BaseCredentials:
-    return service_account.Credentials.from_service_account_file(service_account_file, scopes=SCOPES)
-
+def _authorize_service_account(service_account_file: Path | str, impersonate_user: str | None) -> BaseCredentials:
+    creds = service_account.Credentials.from_service_account_file(service_account_file, scopes=SCOPES)
+    if impersonate_user:
+        creds = creds.with_subject(impersonate_user)
+    return creds
 
 def read_spreadsheet_data(spreadsheet_id: str, range_name: str, credentials: BaseCredentials) -> list[list[str | int | float | bool]]:
+    """Read spreadsheet data by id and range.
+
+    Args:
+        spreadsheet_id (str): id of the spreadsheet to read
+        range_name (str): range within the spreadsheet to read
+        credentials (BaseCredentials): credentials to use for authorization
+
+    Raises:
+        HttpError: if the request to the Google Sheets API fails
+
+    Returns:
+        list[list[str | int | float | bool]]: spreadsheet data of the specified range
+    """
     try:
         service = build("sheets", "v4", credentials=credentials)
         sheet = service.spreadsheets()
