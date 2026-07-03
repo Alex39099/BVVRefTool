@@ -56,7 +56,10 @@ class PersonIdentity:
     last_name: str
     birth_date: date | None = None
     id: str | None = None
-
+    
+@dataclass(frozen=True)
+class PartialPersonIdentity:
+    full_name: str
 
 @dataclass(frozen=True)
 class Referee:
@@ -66,7 +69,7 @@ class Referee:
 
 @dataclass(frozen=True)
 class Participant:
-    identity: PersonIdentity
+    identity: PersonIdentity | PartialPersonIdentity
 
 
 class CourseType(UpperStrEnum):

@@ -17,7 +17,7 @@ import urllib.parse
 from urllib3 import Retry
 
 from AppConfig import AppConfig
-from manager.Data import RefLicenseCategory, Course, RefLicenseType, Registration, RegistrationStatus, \
+from manager.Data import PartialPersonIdentity, RefLicenseCategory, Course, RefLicenseType, Registration, RegistrationStatus, \
     ParticipationStatus, CourseType, RefLicense, PersonIdentity, Referee, Participant, GrantableLicenseCategory, \
     GrantableLicenseType, GrantableLicense
     
@@ -606,8 +606,7 @@ class BVVClient:
         # BVV site gives 200 and no error message, even if the cancellation was not successfull.
         # Need to check the response's content
         soup = BeautifulSoup(response.content, "html.parser")
-        abmelden_img = soup.find("img", {"title": "Abmelden"})
-        if abmelden_img and "disabled" in str(abmelden_img.get("src", "")):
+        if not _action_enabled(soup, "Abmelden"):
             raise ValueError(f"Cancellation of registration {registration_id} rejected.")
         
         return response.content
@@ -687,18 +686,30 @@ def parse_courses_from_html(raw_html: bytes) -> list[dict[str, str]]:
         raise ValueError("Could not find course table in HTML")        
 
     courses = []
+    current_section = None
 
     # Loop through each row within the table
-    current_section = None
     for row in table.find_all('tr'):
         # Check if row is a section header and continue
         section = row.find('div', {'class': 'sectionheader'})
         if section:
-            current_section = section.text
+            current_section = section.get_text(strip=True)
+            continue
+        
+        # skip <th> header rows
+        if row.find('th'):
             continue
 
         # row has course data
         cells = row.find_all('td')
+        
+        # skip empty-section rows
+        if len(cells) != 9:
+            continue
+        
+        if not current_section:
+            raise ValueError("Parser error: course row encountered before section header was parsed")
+        
         if len(cells) > 1:
             if not current_section:
                 raise ValueError("Parser error: course row encountered before section header was parsed")
@@ -708,14 +719,14 @@ def parse_courses_from_html(raw_html: bytes) -> list[dict[str, str]]:
             lid = str(lid_raw['href']).split('lid=')[1].split('&')[0] if lid_raw and 'lid=' in lid_raw['href'] else None
             
             course_data = {
-                'Bereich': cells[0].text,
-                'Datum': cells[1].text,
-                'Bezeichnung': cells[2].text,
-                'Ort': cells[3].text,
-                'Anmeldezeitraum': cells[4].text,
-                'freie Plätze': cells[5].text,
-                'davon sofort verfügbar': cells[6].text,
-                'Warteliste': cells[7].text,
+                'Bereich': cells[0].get_text(strip=True),
+                'Datum': cells[1].get_text(strip=True),
+                'Bezeichnung': cells[2].get_text(strip=True),
+                'Ort': cells[3].get_text(strip=True),
+                'Anmeldezeitraum': cells[4].get_text(strip=True),
+                'freie Plätze': cells[5].get_text(strip=True),
+                'davon sofort verfügbar': cells[6].get_text(strip=True),
+                'Warteliste': cells[7].get_text(strip=True),
                 'Id': lid,
                 'Typ': current_section
             }
@@ -723,6 +734,31 @@ def parse_courses_from_html(raw_html: bytes) -> list[dict[str, str]]:
 
     return courses
 
+def _parse_key_value_table(table):
+    result = {}
+    for row in table.find_all('tr'):
+        cells = row.find_all('td')
+        if len(cells) == 2:
+            key = cells[0].get_text(strip=True).replace(":", "")
+            
+            # some values are img, check if they are either accept.png or tick.png. 
+            # These are used to indicate a True boolean value. 
+            img = cells[1].find("img")
+            if img:
+                value = any(x in img.get("src", "") for x in ["accept.png", "tick.png"])
+            else:
+                value = _extract_text_preserve_breaks(cells[1]).strip()
+            result[key] = value
+    return result
+
+def _extract_text_preserve_breaks(tag) -> str:
+        for br in tag.find_all("br"):
+            br.replace_with("\n")
+        return tag.get_text()
+    
+def _action_enabled(soup: BeautifulSoup, title: str) -> bool:
+    img = soup.find("img", title=title)
+    return img is not None and "disabled" not in str(img.get("src", ""))
 
 def parse_deep_course_from_html(course_id: str, raw_html: bytes) -> dict[str, str]:
     soup = BeautifulSoup(raw_html, 'html.parser')
@@ -730,33 +766,47 @@ def parse_deep_course_from_html(course_id: str, raw_html: bytes) -> dict[str, st
 
     tables = soup.find_all('table')
 
-    def extract_text_preserve_breaks(tag) -> str:
-        for br in tag.find_all("br"):
-            br.replace_with("\n")
-        return tag.get_text()
-
-    def parse_key_value_table(table):
-        result = {}
-        for row in table.find_all('tr'):
-            cells = row.find_all('td')
-            if len(cells) == 2:
-                key = cells[0].get_text(strip=True).replace(":", "")
-                value = extract_text_preserve_breaks(cells[1]).strip()
-                result[key] = value
-        return result
-
     # course info
-    fetched_info.update(parse_key_value_table(tables[0]))
+    fetched_info.update(_parse_key_value_table(tables[0]))
 
     # contact info
-    contact_info = parse_key_value_table(tables[1])
+    contact_info = _parse_key_value_table(tables[1])
     if contact_info:
         fetched_info['Ansprechpartner'] = contact_info
 
     # space info
-    fetched_info.update(parse_key_value_table(tables[2]))
+    fetched_info.update(_parse_key_value_table(tables[2]))
 
     return {'Id': course_id, **fetched_info}
+
+def parse_single_registration_from_html(raw_html: bytes) -> dict[str, str]:
+    soup = BeautifulSoup(raw_html, "html.parser")
+    fetched_info = {}
+    
+    tables = soup.find_all('table')
+    
+    # course info
+    course_info = _parse_key_value_table(tables[0])
+    if course_info:
+        # course id is missing, not included in html page
+        fetched_info['Lehrgangsdaten'] = course_info
+    
+    # personal info
+    personal_info = _parse_key_value_table(tables[1])
+    if personal_info:
+        fetched_info['Personendaten'] = personal_info
+        
+    # registration info
+    registration_info = _parse_key_value_table(tables[2])
+    if registration_info:
+        fetched_info['Anmeldedaten'] = registration_info
+        
+    # parse id
+    aid_form = soup.find("form", {"action": lambda a: bool(a and "abmelden" in a)})
+    aid_input = aid_form.find("input", {"name": "aid"}) if aid_form else None
+    fetched_info["Id"] = aid_input["value"] if aid_input else None
+
+    return fetched_info
 
 
 def parse_licenses_from_html(raw_html: bytes) -> list[dict[str, Any]]:
@@ -783,14 +833,14 @@ def parse_licenses_from_excel(excel: bytes | BinaryIO) -> list[dict[str, Any]]:
     return cast(list[dict[str, Any]], df.to_dict(orient='records'))
 
 
-def parse_registrations_from_html(raw_html: bytes) -> list[dict[str, Any]]:
+def parse_registrations_from_html(raw_html: bytes) -> list[dict[str, str]]:
     soup = BeautifulSoup(raw_html, 'html.parser')
     table = soup.find('table')
     if not table:
         raise ValueError("Could not find registrations table in HTML")
     
     rows = table.find_all('tr')
-    if rows and "keine Anmeldungen für Lehrgänge im angegebenen Zeitraum gefunden" in rows[0].get_text():
+    if rows and "keine Anmeldungen für Lehrgänge im angegebenen Zeitraum gefunden" in rows[0].get_text(strip=True):
         return []
 
     registrations = []
@@ -803,10 +853,10 @@ def parse_registrations_from_html(raw_html: bytes) -> list[dict[str, Any]]:
         # filter for "blue" header
         if headers and 2 < len(headers) < 6:
             current_course_info = {
-                'Typ': headers[0].get_text(),
-                'Name': headers[1].get_text(),
-                'Ort': headers[2].get_text(),
-                'Datum': headers[3].get_text()
+                'Typ': headers[0].get_text(strip=True),
+                'Name': headers[1].get_text(strip=True),
+                'Ort': headers[2].get_text(strip=True),
+                'Datum': headers[3].get_text(strip=True)
             }
             continue
 
@@ -825,11 +875,11 @@ def parse_registrations_from_html(raw_html: bytes) -> list[dict[str, Any]]:
 
             entry = {
                 'Id': aid,
-                'Name': columns[0].get_text(),
-                'Vorname': columns[1].get_text(),
-                'Geburtsdatum': columns[2].get_text(),
-                'Anmeldestatus': columns[4].get_text(),
-                'Teilnahmestatus': columns[5].get_text(),
+                'Name': columns[0].get_text(strip=True),
+                'Vorname': columns[1].get_text(strip=True),
+                'Geburtsdatum': columns[2].get_text(strip=True),
+                'Anmeldestatus': columns[4].get_text(strip=True),
+                'Teilnahmestatus': columns[5].get_text(strip=True),
                 'Kurs': current_course_info
             }
             registrations.append(entry)
@@ -970,35 +1020,23 @@ def normalize_course(raw: dict[str, str]) -> Course:
         address=raw.get('Anschrift'),
         remark=raw.get('Bemerkung')
     )
-
-
-def normalize_registration(raw: dict[str, Any]) -> Registration:
-    identity = PersonIdentity(
-        last_name=raw['Name'],
-        first_name=raw['Vorname'],
-        birth_date=datetime.strptime(raw['Geburtsdatum'], '%d.%m.%Y').date()
-    )
-    participant = Participant(identity=identity)
-
-    # registration_status
-    raw_registration_status = raw['Anmeldestatus']
-    if 'Warteliste' in raw_registration_status:
-        registration_status = RegistrationStatus.WAITING
+    
+def _parse_registration_status(raw: str) -> tuple[RegistrationStatus, int]:
+    if 'Warteliste' in raw:
         # parse waiting position
-        match = re.search(r'Warteliste \((\d+)\)', raw_registration_status)
+        match = re.search(r'Warteliste \((\d+)\)', raw)
         if not match:
-            raise ValueError(f"could not parse waiting_position from raw_registration_status {raw_registration_status}")
+            raise ValueError(f"could not parse waiting_position from raw_registration_status {raw}")
         waiting_position = int(match.group(1))
-    else:
-        mapping = {
-            'zugelassen': 'APPROVED',
-            'storniert (kostenfrei)': 'CANCELLED',
-            'ohne Anmeldung': 'APPROVED'
-        }
-        registration_status = RegistrationStatus(mapping.get(raw_registration_status))
-        waiting_position = 0
+        return RegistrationStatus.WAITING, waiting_position
+    mapping = {
+        'zugelassen': 'APPROVED',
+        'storniert (kostenfrei)': 'CANCELLED',
+        'ohne Anmeldung': 'APPROVED'
+    }
+    return RegistrationStatus(mapping.get(raw)), 0
 
-    # participation_status
+def _parse_participation_status(raw: str) -> ParticipationStatus:
     mapping = {
         'erfolgreich teilgenommen': 'PASSED',
         'teilgenommen': 'PASSED',
@@ -1006,7 +1044,42 @@ def normalize_registration(raw: dict[str, Any]) -> Registration:
         'nicht teilgenommen': 'MISSED',
         'unbekannt': 'PENDING'
     }
-    participation_status = ParticipationStatus(mapping.get(raw['Teilnahmestatus']))
+    return ParticipationStatus(mapping.get(raw))
+
+def _normalize_single_registration(raw: dict[str, Any]) -> Registration:
+    person = raw['Personendaten']['Person']
+    identity = PartialPersonIdentity(full_name=person.split("(")[0].strip())
+    participant = Participant(identity)
+    
+    registration_info = raw['Anmeldedaten']
+    raw_registration_status = registration_info.get('Anmeldestatus', registration_info['Anmdeldestatus'])  # typo on BVV site, be cautios
+    raw_participation_status = registration_info['Teilnahmestatus']
+    
+    registration_status, waiting_position = _parse_registration_status(raw_registration_status)
+    participation_status = _parse_participation_status(raw_participation_status)
+    
+    return Registration(
+        id=raw['Id'],
+        course_label=raw['Lehrgangsdaten']['Name'],
+        participant=participant,
+        registration_status=registration_status,
+        participation_status=participation_status,
+        waiting_position=waiting_position
+    )
+    
+def _normalize_table_registration(raw: dict[str, Any]) -> Registration:
+    identity = PersonIdentity(
+        last_name=raw['Name'],
+        first_name=raw['Vorname'],
+        birth_date=datetime.strptime(raw['Geburtsdatum'], '%d.%m.%Y').date()
+    )
+    participant = Participant(identity=identity)
+    
+    raw_registration_status = raw['Anmeldestatus']
+    raw_participation_status = raw['Teilnahmestatus']
+
+    registration_status, waiting_position = _parse_registration_status(raw_registration_status)
+    participation_status = _parse_participation_status(raw_participation_status)
 
     return Registration(
         id=raw['Id'],
@@ -1017,6 +1090,10 @@ def normalize_registration(raw: dict[str, Any]) -> Registration:
         waiting_position=waiting_position
     )
 
+def normalize_registration(raw: dict[str, Any]) -> Registration:
+    if 'Lehrgangsdaten' in raw:
+        return _normalize_single_registration(raw)
+    return _normalize_table_registration(raw)
 
 def normalize_license(raw: dict[str, Any], excel: bool = True) -> Referee:
     if not excel:
