@@ -652,6 +652,24 @@ class BVVClient:
         response = session.post(self.url_find_user, data=data)
         response.raise_for_status()
         return response.json()
+    
+    @staticmethod
+    def create_user_token(last_name: str, first_name: str, birth_date: date, user_id: str) -> str:
+        """Creates a user token for the BVV site.
+
+        Args:
+            last_name (str): last name of the user.
+            first_name (str): first name of the user.
+            birth_date (date): birth date of the user.
+            user_id (str): the user's ID.
+
+        Returns:
+            str: the generated user token.
+        """
+        for name, value in (("last_name", last_name), ("first_name", first_name), ("user_id", user_id)):
+            if not value or not value.strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        return f"{last_name}, {first_name} ({birth_date.strftime('%d.%m.%Y')}) [{user_id}]"
 
 
 # ====================================================================================================================
