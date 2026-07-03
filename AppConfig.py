@@ -15,9 +15,16 @@ class FromDictMixin:
         return cls(**filtered)
 
 @dataclass(frozen=True)
-class GeneralSettings(FromDictMixin):
+class GeneralSettings:
+    db_path: str
     districts: list[str]
 
+    @classmethod
+    def from_dict(cls, data: dict, config_dir: Path) -> "GeneralSettings":
+        return cls(
+            db_path=config_dir / data['db_path'],
+            districts=data['districts']
+        )
 
 @dataclass(frozen=True)
 class SMTPSettings(FromDictMixin):
@@ -33,6 +40,7 @@ class BVVSettings(FromDictMixin):
     password: str
     club_id: str
 
+
 @dataclass(frozen=True)
 class GoogleServiceAccountAuthorizationSettings:
     service_account_key_file_path: Path
@@ -44,6 +52,7 @@ class GoogleServiceAccountAuthorizationSettings:
             service_account_key_file_path=config_dir / data['service_account_key_file_path'],
             impersonate_user=data.get('impersonate_user')
         )
+
 
 @dataclass(frozen=True)
 class GoogleOAuthAuthorizationSettings:
@@ -57,9 +66,12 @@ class GoogleOAuthAuthorizationSettings:
             oauth_token_file_path=config_dir / data['oauth_token_file_path']
         )
 
+
 class AuthorizationType(StrEnum):
     SERVICE_ACCOUNT = "service_account"
     OAUTH = "oauth"
+
+
 @dataclass(frozen=True)
 class GoogleSettings:
     authorization_type: AuthorizationType
@@ -82,6 +94,7 @@ class GoogleSettings:
             service_account_authorization=GoogleServiceAccountAuthorizationSettings.from_dict(service_account_settings, config_dir) if service_account_settings else None,
             oauth_authorization=GoogleOAuthAuthorizationSettings.from_dict(oauth_settings, config_dir) if oauth_settings else None
         )
+
 
 @dataclass(frozen=True)
 class SubscriptionSettings:
@@ -123,7 +136,7 @@ class AppConfig:
 
         return cls(
             debug=config.get('debug', False),
-            general=GeneralSettings.from_dict(config['general']),
+            general=GeneralSettings.from_dict(config['general'], config_dir=config_dir),
             bvv=BVVSettings.from_dict(config['bvv_credentials']),
             smtp=SMTPSettings.from_dict(config['smtp_credentials']),
             google=GoogleSettings.from_dict(config['google_credentials'], config_dir=config_dir),

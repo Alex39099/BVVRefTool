@@ -1,5 +1,6 @@
 {
     "general": {
+        "db_path": "ref_management_db.sql",
         "districts": [
             "BVV/Sch",
             "BVV"

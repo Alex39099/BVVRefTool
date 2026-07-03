@@ -31,9 +31,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def scrape_and_save_data(db_path: str, config: AppConfig) -> tuple[int, datetime]:
+def scrape_and_save_data(config: AppConfig) -> tuple[int, datetime]:
     scraper = BVVClient.from_config(config)
-    snapshot_rep = SnapshotRepository(db_path)
+    snapshot_rep = SnapshotRepository(config.general.db_path)
 
     run_id, collected_at = snapshot_rep.create_run()
     scraped_data = {}
@@ -61,8 +61,8 @@ def scrape_and_save_data(db_path: str, config: AppConfig) -> tuple[int, datetime
     return run_id, collected_at
 
 
-def send_new_course_notification_management(db_path: str, config: AppConfig):
-    snapshot_repo = SnapshotRepository(db_path)
+def send_new_course_notification_management(config: AppConfig):
+    snapshot_repo = SnapshotRepository(config.general.db_path)
     recent_course_snapshots = snapshot_repo.get_recent_snapshots(source=SnapshotSource.BVV_COURSES, limit=2)
     parsed_courses = [parse_courses_from_html(snapshot.raw_data) for snapshot in recent_course_snapshots]
     normalized_courses = [[normalize_course(parsed_course) for parsed_course in parsed_courses[i]]
@@ -100,8 +100,8 @@ def send_new_course_notification_management(db_path: str, config: AppConfig):
         mailer.send_mail(mail_constructor.get_mail())
 
 
-def subscription_srv(db_path: str, config: AppConfig):
-    snapshot_repo = SnapshotRepository(db_path)
+def subscription_srv(config: AppConfig):
+    snapshot_repo = SnapshotRepository(config.general.db_path)
     recent_course_snapshots = snapshot_repo.get_recent_snapshots(source=SnapshotSource.BVV_COURSES, limit=2)
     parsed_courses = [parse_courses_from_html(snapshot.raw_data) for snapshot in recent_course_snapshots]
     normalized_courses = [[normalize_course(parsed_course) for parsed_course in parsed_courses[i]]
@@ -140,20 +140,18 @@ def main(program_path):
     os.makedirs(log_dir, exist_ok=True)
     logging.basicConfig(filename=os.path.join(log_dir, f"{datetime.now(tz=timezone.utc).strftime('%Y-%m-%dT%H-%MZ')}.log"), encoding="utf-8", level=logging.DEBUG)
 
-    db_path = os.path.join(program_path, "ref_management_db.sql")
-
     config_path = os.path.join(program_path, "config.json")
     config = AppConfig.from_file(config_path)
 
     # scrape new data
-    run_id, collected_at = scrape_and_save_data(db_path, config)
+    run_id, collected_at = scrape_and_save_data(config)
 
     # send course notification to management
-    send_new_course_notification_management(db_path, config)
+    send_new_course_notification_management(config)
 
     # subscription service
     try:
-        subscription_srv(db_path=db_path, config=config)
+        subscription_srv(config=config)
     except Exception as e:
         logger.error("Something went wrong for subscription service")
         logger.exception(e)
@@ -169,7 +167,7 @@ def main(program_path):
         mailer.send_mail(mail_constructor.get_mail())
 
     # only keep latest snapshots from current run_id
-    snapshot_rep = SnapshotRepository(db_path)
+    snapshot_rep = SnapshotRepository(config.general.db_path)
     snapshot_rep.delete_runs_older_than(collected_at)
 
 
