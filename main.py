@@ -13,12 +13,13 @@
 #      You should have received a copy of the GNU General Public License
 #      along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from functools import cache
 import logging
 import os
 import sys
 from datetime import datetime, timezone
 
-from AppConfig import AppConfig
+from AppConfig import AppConfig, GoogleSettings
 from helper import GoogleService
 from helper.Mailing import MailConstructor, Mailer
 from manager.BVVTools import BVVClient, parse_courses_from_html, normalize_course
@@ -127,12 +128,17 @@ def subscription_srv(config: AppConfig):
         return
 
     # Google credentials
-    gc_credentials = GoogleService.authorize(config.google)
+    gc_credentials = get_google_credentials(config.google)
 
     # Subscription Service
     srv = SubscriptionService.from_config(config=config, gc_credentials=gc_credentials)
     srv.send_new_course_notifications(courses_of_interest)
     logger.info("subscription service finished")
+    
+    
+@cache
+def get_google_credentials(google_config: GoogleSettings) -> GoogleService.BaseCredentials:
+    return GoogleService.authorize(google_config)
 
 
 def main(program_path):
