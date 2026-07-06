@@ -16,7 +16,7 @@ from AppConfig import AuthorizationType, GoogleSettings
 logger = logging.getLogger(__name__)
 
 # If modifying these scopes, delete the token file for oauth
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"] # ["https://www.googleapis.com/auth/spreadsheets"]
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 def authorize(settings: GoogleSettings) -> BaseCredentials:
     """Authorize to Google Cloud using either service account or OAuth credentials based on the provided settings.
