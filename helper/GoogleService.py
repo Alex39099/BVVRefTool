@@ -16,7 +16,10 @@ from AppConfig import AuthorizationType, GoogleSettings
 logger = logging.getLogger(__name__)
 
 # If modifying these scopes, delete the token file for oauth
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/forms.body",
+]
 
 def authorize(settings: GoogleSettings) -> BaseCredentials:
     """Authorize to Google Cloud using either service account or OAuth credentials based on the provided settings.
@@ -189,3 +192,65 @@ def write_spreadsheet_data(spreadsheet_id: str, range_name: str, data: list[list
     )
 
     return response
+
+def update_form_dropdown(form_id: str, items: dict[str, list[str]], credentials: BaseCredentials) -> dict:
+    """Updates the options of one or more dropdown questions in a Google Form.
+
+    Args:
+        form_id (str): The unique identifier of the Google Form to update.
+        items (dict[str, list[str]]): A dictionary mapping each item_id (str) to a list of strings
+                                    representing the new dropdown options to set on that question.
+                                    If any item's option list is empty, a warning is logged and the
+                                    update for that item is still attempted.
+        credentials (BaseCredentials): credentials to use for authorization
+
+    Returns:
+        dict: A dictionary containing the API response from the batchUpdate call, as returned by the Google Forms API v1.
+    """
+    for item_id, options in items.items():
+        if not options:
+            logger.warning(
+                f"No options provided for form_id {form_id} and item_id {item_id}"
+            )
+        
+    try:
+        service = build("forms", "v1", credentials=credentials)
+
+        # Build one updateItem request per item_id in the mapping
+        requests = [
+            {
+                "updateItem": {
+                    "item": {
+                        "itemId": item_id,
+                        "questionItem": {
+                            "question": {
+                                "choiceQuestion": {
+                                    "type": "DROP_DOWN",
+                                    # Build the list of choice option dicts expected by the Forms API
+                                    "options": [{"value": option} for option in options],
+                                }
+                            }
+                        },
+                    },
+                    # Specify which fields within the item should be updated
+                    "updateMask": "questionItem.question.choiceQuestion.options",
+                    "location": {"index": 0},
+                }
+            }
+            for item_id, options in items.items()
+        ]
+
+        body = {"requests": requests}
+
+        response = (
+            service.forms()
+            .batchUpdate(formId=form_id, body=body)
+            .execute()
+        )
+
+        return response
+
+    except HttpError as e:
+        logger.error(f"Could not update dropdown options for form_id {form_id} and item_ids {list(items.keys())}")
+        logger.exception(e)        
+        raise
