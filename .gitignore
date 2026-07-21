@@ -6,3 +6,4 @@ ref_management_db.sql
 /testing/
 */__pycache__/
 /__pycache__/
+/jupyter_lab/
