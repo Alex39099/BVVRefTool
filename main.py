@@ -19,7 +19,7 @@ import os
 import sys
 from datetime import datetime, timezone
 
-from AppConfig import AppConfig, GoogleSettings
+from config.AppConfig import AppConfig, GoogleSettings
 from helper import GoogleService
 from helper.Mailing import MailConstructor, Mailer
 from manager.BVVTools import BVVClient, parse_courses_from_html, normalize_course

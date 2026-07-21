@@ -7,3 +7,5 @@ ref_management_db.sql
 */__pycache__/
 /__pycache__/
 /jupyter_lab/
+/.ipynb_checkpoints/
+BVVRefTool.egg-info

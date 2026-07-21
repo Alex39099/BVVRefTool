@@ -16,7 +16,7 @@ from requests.adapters import HTTPAdapter
 import urllib.parse
 from urllib3 import Retry
 
-from AppConfig import AppConfig
+from config.AppConfig import AppConfig
 from manager.Data import PartialPersonIdentity, RefLicenseCategory, Course, RefLicenseType, Registration, RegistrationStatus, \
     ParticipationStatus, CourseType, RefLicense, PersonIdentity, Referee, Participant, GrantableLicenseCategory, \
     GrantableLicenseType, GrantableLicense
