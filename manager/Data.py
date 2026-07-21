@@ -86,8 +86,6 @@ class GrantableLicenseType(UpperStrEnum):
     CP = 'CP'
     BK = 'BK'
     B = 'B'
-    AK = 'AK'
-    A = 'A'
 
 
 class GrantableLicenseCategory(UpperStrEnum):
