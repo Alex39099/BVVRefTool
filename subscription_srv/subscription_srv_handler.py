@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from google.auth.credentials import Credentials
 
-from AppConfig import AppConfig
+from config.AppConfig import AppConfig
 from helper.GoogleService import read_spreadsheet_data
 from helper.Mailing import MailConstructor, Mailer
 from manager.Data import Course, GrantableLicense, GrantableLicenseType, GrantableLicenseCategory, CourseType
