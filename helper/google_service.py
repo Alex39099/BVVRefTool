@@ -11,7 +11,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from config.AppConfig import AuthorizationType, GoogleSettings
+from config.app_config import AuthorizationType, GoogleSettings
 
 logger = logging.getLogger(__name__)
 

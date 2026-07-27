@@ -16,8 +16,8 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
-from config.AppConfig import AppConfig
-from manager.Data import (
+from config.app_config import AppConfig
+from manager.models import (
     Course,
     CourseType,
     GrantableLicense,

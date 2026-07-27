@@ -9,7 +9,7 @@ from email.utils import formataddr, getaddresses
 
 import html2text
 
-from config.AppConfig import SMTPSettings
+from config.app_config import SMTPSettings
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

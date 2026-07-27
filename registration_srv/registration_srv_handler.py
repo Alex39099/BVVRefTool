@@ -1,13 +1,14 @@
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
-import logging
-from typing import Any, Callable
+from typing import Any
 
 from google.oauth2.credentials import Credentials
 
-from config.AppConfig import AppConfig
-from manager.BVVTools import BVVClient, BVVSession
-from manager.Data import PersonIdentity, Referee, Registration
+from config.app_config import AppConfig
+from manager.bvv_tools import BVVClient, BVVSession
+from manager.models import PersonIdentity, Referee, Registration
 
 logger = logging.getLogger(__name__)
 

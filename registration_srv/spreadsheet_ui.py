@@ -8,7 +8,7 @@ from typing import Any
 import pygsheets
 from googleapiclient.discovery import build
 
-from manager.Data import Course
+from manager.models import Course
 
 logger = logging.getLogger(__name__)
 
