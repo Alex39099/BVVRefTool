@@ -23,9 +23,13 @@ from config.app_config import AppConfig, GoogleSettings
 from helper import google_service
 from helper.mailing_helper import MailConstructor, Mailer
 from manager.bvv_tools import BVVClient, normalize_course, parse_courses_from_html
-from manager.models import Course
 from manager.diff_layer import ChangeEventType, DiffLayer
-from manager.storage_layer import ScraperRunningStatus, SnapshotRepository, SnapshotSource
+from manager.models import Course
+from manager.storage_layer import (
+    ScraperRunningStatus,
+    SnapshotRepository,
+    SnapshotSource,
+)
 from subscription_srv.subscription_srv_handler import SubscriptionService
 
 logger = logging.getLogger(__name__)
