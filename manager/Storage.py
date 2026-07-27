@@ -1,9 +1,9 @@
 #  Copyright (c) 2026. Alexander Schmid
-from pathlib import Path
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from pathlib import Path
 
 
 class ScraperRunningStatus(StrEnum):

@@ -126,7 +126,7 @@ class Course:
 
     @staticmethod
     def fmt_date(value: datetime | date | None) -> str | None:
-        if isinstance(value, datetime) or isinstance(value, date):
+        if isinstance(value, (datetime, date)):
             return value.strftime('%d.%m.%Y')
         return None
 
@@ -181,7 +181,7 @@ class Course:
             }
 
         def fmt(value):
-            if isinstance(value, datetime) or isinstance(value, date):
+            if isinstance(value, (datetime, date)):
                 value = self.fmt_date(value)
             return escape(str(value)) if value is not None else "-"
 

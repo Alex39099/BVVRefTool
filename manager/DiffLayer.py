@@ -1,9 +1,7 @@
 #  Copyright (c) 2026. Alexander Schmid
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, TypeVar, Generic, List, Callable
-
-T = TypeVar("T")
 
 
 class ChangeEventType(Enum):
@@ -13,25 +11,25 @@ class ChangeEventType(Enum):
 
 
 @dataclass(frozen=True)
-class ChangeEvent(Generic[T]):
+class ChangeEvent[T, K]:
     type: ChangeEventType
     before: T | None  # None for ADDED
     after: T | None  # None for REMOVED
-    key: Any  # identifier for the object (e.g. id, identity)
+    key: K  # identifier for the object (e.g. id, identity)
 
 
-class DiffLayer(Generic[T]):
-    def __init__(self, key_func: Callable[[T], Any]):
+class DiffLayer[T, K]:
+    def __init__(self, key_func: Callable[[T], K]):
         """
         :param key_func: function to extract unique key from an object
         """
         self.key_func = key_func
 
-    def diff(self, old_items: list[T], new_items: list[T]) -> list[ChangeEvent[T]]:
+    def diff(self, old_items: list[T], new_items: list[T]) -> list[ChangeEvent[T, K]]:
         old_map = {self.key_func(item): item for item in old_items}
         new_map = {self.key_func(item): item for item in new_items}
 
-        events: List[ChangeEvent[T]] = []
+        events: list[ChangeEvent[T, K]] = []
 
         # detect removed
         for k, old_item in old_map.items():

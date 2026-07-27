@@ -3,24 +3,38 @@ import io
 import logging
 import re
 import time
+import urllib.parse
 import warnings
-from dataclasses import dataclass, InitVar
-from datetime import datetime, date
+from dataclasses import InitVar, dataclass
+from datetime import date, datetime
 from typing import Any, BinaryIO, cast
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
-import urllib.parse
 from urllib3 import Retry
 
 from config.AppConfig import AppConfig
-from manager.Data import PartialPersonIdentity, RefLicenseCategory, Course, RefLicenseType, Registration, RegistrationStatus, \
-    ParticipationStatus, CourseType, RefLicense, PersonIdentity, Referee, Participant, GrantableLicenseCategory, \
-    GrantableLicenseType, GrantableLicense
-    
+from manager.Data import (
+    Course,
+    CourseType,
+    GrantableLicense,
+    GrantableLicenseCategory,
+    GrantableLicenseType,
+    PartialPersonIdentity,
+    Participant,
+    ParticipationStatus,
+    PersonIdentity,
+    Referee,
+    RefLicense,
+    RefLicenseCategory,
+    RefLicenseType,
+    Registration,
+    RegistrationStatus,
+)
+
 logger = logging.getLogger(__name__)
 
 class BVVSession(requests.Session):
@@ -134,8 +148,8 @@ class BVVSession(requests.Session):
                 logger.error("Logout failed")
             else:
                 logger.info("Logged out")
-        except Exception as e:
-            logger.exception(f"Logout exception: {e}")
+        except Exception:
+            logger.exception("Logout error")
         finally:
             self.close()
         return False  # propagate exceptions from the block

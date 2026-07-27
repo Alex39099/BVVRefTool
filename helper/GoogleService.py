@@ -3,11 +3,11 @@ import os
 from pathlib import Path
 from typing import Any
 
+from google.auth.credentials import Credentials as BaseCredentials
+from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
-from google.auth.credentials import Credentials as BaseCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -126,12 +126,11 @@ def read_spreadsheet_data(spreadsheet_id: str, range_name: str, credentials: Bas
         if not values:
             logger.warning(f"No data found for spreadsheet_id {spreadsheet_id} and range {range_name}")
         return values
-    except HttpError as e:
-        logger.error(f"Sheets API HTTP error while reading from spreadsheet '{spreadsheet_id}', range '{range_name}': {e}")
-        logger.exception(e)
+    except HttpError:
+        logger.exception(f"Sheets API HTTP error while reading from spreadsheet '{spreadsheet_id}', range '{range_name}'")
         raise
-    except Exception as e:
-        logger.error(f"Unexpected error while reading from spreadsheet '{spreadsheet_id}', range '{range_name}': {e}")
+    except Exception:
+        logger.exception(f"Unexpected error while reading from spreadsheet '{spreadsheet_id}', range '{range_name}'")
         raise
     
 def write_spreadsheet_data(spreadsheet_id: str, range_name: str, data: list[list[Any]], credentials: BaseCredentials) -> dict:

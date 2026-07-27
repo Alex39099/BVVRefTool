@@ -1,15 +1,15 @@
 #  Copyright (c) 2026. Alexander Schmid
 import dataclasses
-from enum import StrEnum
 import json
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
-from typing import Self
+from typing import Any, Self
 
 
 class FromDictMixin:
     @classmethod
-    def from_dict(cls, data: dict) -> Self:
+    def from_dict(cls, data: dict[str, Any]) -> Self:
         valid_keys = {f.name for f in dataclasses.fields(cls)}  # type: ignore[arg-type]
         filtered = {k: v for k, v in data.items() if k in valid_keys}
         return cls(**filtered)
@@ -20,7 +20,7 @@ class GeneralSettings:
     districts: list[str]
 
     @classmethod
-    def from_dict(cls, data: dict, config_dir: Path) -> "GeneralSettings":
+    def from_dict(cls, data: dict[str, Any], config_dir: Path) -> "GeneralSettings":
         return cls(
             db_path=config_dir / data['db_path'],
             districts=data['districts']
@@ -47,7 +47,7 @@ class GoogleServiceAccountAuthorizationSettings:
     impersonate_user: str | None = None
     
     @classmethod
-    def from_dict(cls, data: dict, config_dir: Path) -> "GoogleServiceAccountAuthorizationSettings":
+    def from_dict(cls, data: dict[str, Any], config_dir: Path) -> "GoogleServiceAccountAuthorizationSettings":
         return cls(
             service_account_key_file_path=config_dir / data['service_account_key_file_path'],
             impersonate_user=data.get('impersonate_user')
@@ -79,7 +79,7 @@ class GoogleSettings:
     oauth_authorization: GoogleOAuthAuthorizationSettings | None = None
 
     @classmethod
-    def from_dict(cls, data: dict, config_dir: Path) -> "GoogleSettings":
+    def from_dict(cls, data: dict[str, Any], config_dir: Path) -> "GoogleSettings":
         authorization_type = AuthorizationType(data['authorization_type'])
         service_account_settings = data.get('service_account_authorization')
         oauth_settings = data.get('oauth_authorization')
@@ -107,7 +107,7 @@ class SubscriptionSettings:
     new_course_mail_template: str
 
     @classmethod
-    def from_dict(cls, data: dict, template_dir: Path) -> "SubscriptionSettings":
+    def from_dict(cls, data: dict[str, Any], template_dir: Path) -> "SubscriptionSettings":
         return cls(
             from_mail=(data['from_name'], data['from_mail']),
             spreadsheet_id=data['spreadsheet_id'],

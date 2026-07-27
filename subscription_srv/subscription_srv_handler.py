@@ -9,7 +9,13 @@ from google.auth.credentials import Credentials
 from config.AppConfig import AppConfig
 from helper.GoogleService import read_spreadsheet_data
 from helper.Mailing import MailConstructor, Mailer
-from manager.Data import Course, GrantableLicense, GrantableLicenseType, GrantableLicenseCategory, CourseType
+from manager.Data import (
+    Course,
+    CourseType,
+    GrantableLicense,
+    GrantableLicenseCategory,
+    GrantableLicenseType,
+)
 
 logger = logging.getLogger(__name__)
 

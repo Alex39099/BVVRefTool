@@ -13,19 +13,19 @@
 #      You should have received a copy of the GNU General Public License
 #      along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from functools import cache
 import logging
 import os
 import sys
 from datetime import datetime, timezone
+from functools import cache
 
 from config.AppConfig import AppConfig, GoogleSettings
 from helper import GoogleService
 from helper.Mailing import MailConstructor, Mailer
-from manager.BVVTools import BVVClient, parse_courses_from_html, normalize_course
+from manager.BVVTools import BVVClient, normalize_course, parse_courses_from_html
 from manager.Data import Course
-from manager.DiffLayer import DiffLayer, ChangeEventType
-from manager.Storage import SnapshotRepository, SnapshotSource, ScraperRunningStatus
+from manager.DiffLayer import ChangeEventType, DiffLayer
+from manager.Storage import ScraperRunningStatus, SnapshotRepository, SnapshotSource
 from subscription_srv.subscription_srv_handler import SubscriptionService
 
 logger = logging.getLogger(__name__)
@@ -47,11 +47,10 @@ def scrape_and_save_data(config: AppConfig) -> tuple[int, datetime]:
             scraped_data[SnapshotSource.BVV_LICENSES_EXCEL] = scraper.scrape_licenses_excel(session)
             scraped_data[SnapshotSource.BVV_MEMBERS] = scraper.scrape_members(session)
         logger.info(f"all data was scraped for run_id {run_id}")
-    except Exception as e:
-        logger.error(f"Failed to scrape data for run_id {run_id} because {e}")
+    except Exception:
+        logger.exception(f"Failed to scrape data for run_id {run_id}")
         snapshot_rep.update_run_status(run_id, ScraperRunningStatus.FAILED)
-        logger.exception(e)
-        raise e
+        raise
 
     # save data in repo
     for k, v in scraped_data.items():
@@ -77,7 +76,7 @@ def send_new_course_notification_management(config: AppConfig):
     if len(normalized_courses) > 1:
         previous_courses = normalized_courses[1]
 
-    diff_layer = DiffLayer[Course](key_func=lambda c: c.id)
+    diff_layer = DiffLayer[Course, str](key_func=lambda c: c.id)
     events = diff_layer.diff(previous_courses, latest_courses)
 
     added_courses = [e.after for e in events if e.type == ChangeEventType.ADDED]
@@ -116,7 +115,7 @@ def subscription_srv(config: AppConfig):
     if len(normalized_courses) > 1:
         previous_courses = normalized_courses[1]
 
-    diff_layer = DiffLayer[Course](key_func=lambda c: c.id)
+    diff_layer = DiffLayer[Course, str](key_func=lambda c: c.id)
     events = diff_layer.diff(previous_courses, latest_courses)
 
     added_courses = [e.after for e in events if e.type == ChangeEventType.ADDED]
@@ -150,7 +149,7 @@ def main(program_path):
     config = AppConfig.from_file(config_path)
 
     # scrape new data
-    run_id, collected_at = scrape_and_save_data(config)
+    _, collected_at = scrape_and_save_data(config)
 
     # send course notification to management
     send_new_course_notification_management(config)
@@ -159,8 +158,7 @@ def main(program_path):
     try:
         subscription_srv(config=config)
     except Exception as e:
-        logger.error("Something went wrong for subscription service")
-        logger.exception(e)
+        logger.exception("Something went wrong for subscription service")
 
         # send mail to management
         mailer = Mailer(config.smtp)
