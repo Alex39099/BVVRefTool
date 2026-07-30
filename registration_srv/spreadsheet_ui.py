@@ -5,43 +5,19 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-import pygsheets
 from googleapiclient.discovery import build
 
 from manager.models import Course
 
 logger = logging.getLogger(__name__)
-
-
-def lib():
-    gc_credentials = None
-    gc = pygsheets.authorize(custom_credentials=gc_credentials)
-    
-    team_drive_id = ""
-    gc.drive.enable_team_drive(team_drive_id)
-    
-    
-    spreadsheet_id = ""
-    spreadsheet = gc.open_by_key(spreadsheet_id)
-    ss = gc.create(title="Some title", template="SOME TEMPLATE OBJ")
-    
-    template_wks = spreadsheet.worksheet_by_title('course_template')
-    
-    wks = spreadsheet.add_worksheet(
-        title="Neuer Lehrgang...",
-        src_worksheet=template_wks
-    )
-    # protected ranges will not be copied
-    # we need to protect A:C, E:I, D1:D14. 
-    # Allowed accounts/groups: admin@tsvhaunstetten.de, abteilungsleitung@haunstetten-volleyball.de, schiedsrichter-orga@haunstetten-volleyball.de
-    
-    
-    
-    
     
 
 class BaseSheet(ABC):
-    pass
+    
+    def __init__(self) -> None:
+        super().__init__()
+        self._jsonsheet = 
+    
 
 
 class CourseSheetStatus(StrEnum):
@@ -187,7 +163,7 @@ class MemberSheet(BaseSheet):
     pass
     
     
-class RegistrationSpreadsheet():
+class RegistrationSpreadsheet:
     
     course_sheets: list[CourseSheet]
     course_template_sheet: Any
