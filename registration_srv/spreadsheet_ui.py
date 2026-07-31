@@ -1,3 +1,4 @@
+from datetime import date, datetime
 import logging
 import re
 from abc import ABC, abstractmethod
@@ -60,8 +61,8 @@ class CourseSheetRegistrationStatus(StrEnum):
     
 @dataclass
 class CourseSheetRegistration:
-    team_name: str
-    team_priority: int
+    team_name: str  # immutable
+    team_priority: int  # immutable
     member_token: str
     status: CourseSheetRegistrationStatus
     priority: int | None
@@ -107,21 +108,38 @@ def get_grid_range(sheet_id: int, bounds: tuple[str, str] | None):
         "startColumnIndex": _column_to_index(start_col),
         "endColumnIndex": _column_to_index(end_col) + 1 # exclusive
     }
+    
+@dataclass
+class CourseSheetCourseInfo:
+    id: str
+    type_raw: str
+    label: str
+    location: str
+    date_start: date
+    date_end: date
+    save_places: int
+    
+    
 
 class CourseSheet(BaseSheet):
     
     _COURSE_INFO_RANGE = ("B2", "C9")
-    _HOW_TO_RANGE = ("B11", "C11")
     
     _REGISTRATION_TABLE_START = "B15"
     _REGISTRATION_TABLE_COLOR_GREY_RGB = (0.9372549, 0.9372549, 0.9372549)
     _REGISTRATION_COUNT_PER_TEAM = 5
     
+    # TODO implement TrackedModel
+    
     _id: str
-    _title: str
+    title: str
+    
+    _course: Course  # via developerMetadata, frozen
+    registration_end: datetime
     _status: CourseSheetStatus
-    team_names: list[str]
-    registrations: list[CourseSheetRegistration] # pos of registrations?
+    
+    team_names: tuple[str, ...]  # frozen
+    registrations: tuple[CourseSheetRegistration, ...] # frozen
     
     # TODO after creation, everything should be frozen except title, status and registrations
     # TODO registrations should only be changeable through functions of this class to flag changes, i.e. make CourseSheetRegistration frozen
@@ -142,15 +160,25 @@ class CourseSheet(BaseSheet):
         return self._id
     
     @property
-    def title(self) -> str:
-        return self._title
+    def course(self) -> Course:
+        return self._course
     
     @property
     def status(self) -> CourseSheetStatus:
         return self._status
     
+    @property
+    def accepted_registrations(self):
+        return sum(
+            registration.status in {
+                CourseSheetRegistrationStatus.READY_FOR_SUBMISSION,
+                CourseSheetRegistrationStatus.REGISTERED
+            }
+            for registration in self.registrations
+        )
+    
     @classmethod
-    def create(cls, spreadsheet_id: str, template_sheet_id: str, course: Course, team_names: list[str]) -> CourseSheet:
+    def create(cls, spreadsheet_id: str, template_sheet_id: str, course: Course, team_names: list[str]):
         # copy template wks
         # insert header table values
         # create space for amount of teams
@@ -158,10 +186,6 @@ class CourseSheet(BaseSheet):
         # update drop down Mitglied to corresponding Members column
         # create protected ranges. We need to protect A:C, E:I, D1:D14. 
         # update OverviewSheet?
-        pass
-    
-    def update_course_data(self, course: Course):
-        # update header table values
         pass
     
     def start_review(self):
@@ -176,7 +200,7 @@ class CourseSheet(BaseSheet):
     def mark_as_submitted(self):
         pass
     
-    def protect(self):
+    def _protect_sheet(self):
         # protect whole sheet
         pass
 
@@ -187,9 +211,9 @@ class MemberSheet(BaseSheet):
     pass
     
     
-class RegistrationSpreadsheet():
+class RegistrationSpreadsheet:
     
-    course_sheets: list[CourseSheet]
+    course_sheets: dict[int, CourseSheet]
     course_template_sheet: Any
     member_sheet: MemberSheet
     overview_sheet: OverviewSheet
@@ -197,6 +221,7 @@ class RegistrationSpreadsheet():
     def __init__(self, credentials) -> None:
         # Google Sheets API: https://developers.google.com/workspace/sheets/api/guides/concepts
         self._gservice: Any = build("sheets", "v4", credentials).spreadsheets()
+        self._deleted_sheet_ids: set[int] = set()
         
         self.load()
     
@@ -204,10 +229,26 @@ class RegistrationSpreadsheet():
         # load data from cloud
         pass
     
-    def commit(self):
+    def push(self):
         # commit data to cloud
+        
+        requests = []
+        
+        # Handle deletions
+        for sheet_id in self._deleted_sheet_ids:
+            requests.append({
+                "deleteSheet": {"sheetId": sheet_id}
+            })
+            # TODO delete developerMetaData
+            # TODO update overview page
+            
+        self._deleted_sheet_ids.clear()
+    
+    def create_course_sheet(self, course: Course, team_names: list[str]):
         pass
     
-    def create_course_sheet(self):
-        pass
+    def delete_course_sheet(self, course_id: int):
+        if course_id in self.course_sheets:
+            del self.course_sheets[course_id]
+            self._deleted_sheet_ids.add(course_id)
     
