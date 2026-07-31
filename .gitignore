@@ -4,8 +4,7 @@ gc_*
 /logs/
 ref_management_db.sql
 /testing/
-*/__pycache__/
-/__pycache__/
+**/__pycache__/
 /jupyter_lab/
 /.ipynb_checkpoints/
 BVVRefTool.egg-info
