@@ -1,9 +1,36 @@
 import copy
 import json
 import re
+from collections.abc import Iterator, MutableMapping
 from dataclasses import dataclass
 from typing import Any
 
+
+class TrackedModel:
+    _WILDCARD_FIELD = "*"
+    _dirty_fields: set[str]
+    
+    def __init__(self, is_dirty: bool = False):
+        self._dirty_fields = set()
+        if is_dirty:
+            self._dirty_fields.add(self._WILDCARD_FIELD)
+        
+    def _mark_dirty(self, field_name: str):
+        self._dirty_fields.add(field_name)
+        
+    def mark_clean(self):
+        self._dirty_fields.clear()
+        
+    @property
+    def is_dirty(self):
+        return len(self._dirty_fields) != 0
+        
+    @property
+    def dirty_field_mask(self) -> str:
+        if self._WILDCARD_FIELD in self._dirty_fields:
+            return self._WILDCARD_FIELD
+        field_mask = ",".join(self._dirty_fields)
+        return field_mask
 
 @dataclass(frozen=True)
 class GridRange:
@@ -122,14 +149,13 @@ class GridRange:
         return data
 
        
-class ProtectedRange:
+class ProtectedRange(TrackedModel):
     
     _jsonobject: dict[str, Any]
-    _is_dirty: bool
     
     def __init__(self, jsonobject: dict[str, Any] | None = None, range: GridRange | dict[str, int] | None = None, is_dirty: bool = True):
+        super().__init__(is_dirty)
         self._jsonobject: dict[str, Any] = {}
-        self._is_dirty = is_dirty
         if jsonobject is not None:
             self._jsonobject: dict[str, Any] = json.loads(json.dumps(self._jsonobject))
         elif range is not None:
@@ -154,22 +180,12 @@ class ProtectedRange:
     def to_json(self):
         # return a copy
         return json.loads(json.dumps(self._jsonobject))
-    
-    def _mark_dirty(self) -> None:
-        self._is_dirty = True
-        
-    def mark_clean(self) -> None:
-        self._is_dirty = False
         
     def copy(self) -> "ProtectedRange":
         json_copy = json.loads(json.dumps(self._jsonobject))
         if 'protectedRangeId' in json_copy:
             json_copy.pop('protectedRangeId')
         return ProtectedRange(jsonobject=json_copy, is_dirty=True)
-    
-    @property
-    def is_dirty(self) -> bool:
-        return self._is_dirty
     
     @property
     def id(self) -> int | None:
@@ -179,11 +195,9 @@ class ProtectedRange:
     def id(self, value: int) -> None:
         if not isinstance(value, int):
             raise TypeError("id must be of type int")
-        current_id = self._jsonobject.get('protectedRangeId')
-        if current_id != id:
+        if self._jsonobject.get('protectedRangeId') is not None:
             raise ValueError("id cannot be changed once set")
         self._jsonobject['protectedRangeId'] = id
-        self._mark_dirty()
     
     @property
     def description(self) -> str:
@@ -194,7 +208,7 @@ class ProtectedRange:
         if not isinstance(value, str):
             raise TypeError("description must be a string")
         self._jsonobject['description'] = value
-        self._mark_dirty()
+        self._mark_dirty('description')
             
     @property
     def warningOnly(self) -> bool:
@@ -205,7 +219,7 @@ class ProtectedRange:
         if not isinstance(value, bool):
             raise TypeError("warningOnly must be of type bool")
         self._jsonobject['warningOnly'] = value
-        self._mark_dirty()
+        self._mark_dirty('warningOnly')
     
     @property
     def groups(self) -> set[str]:
@@ -218,7 +232,7 @@ class ProtectedRange:
         if not all(isinstance(group, str) and group for group in value):
             raise ValueError("groups must be a set of non-empty strings")
         self._jsonobject.setdefault("editors", {})["groups"] = list(value)
-        self._mark_dirty()
+        self._mark_dirty('editors')
         
     @property
     def users(self) -> set[str]:
@@ -231,7 +245,7 @@ class ProtectedRange:
         if not all(isinstance(item, str) and item for item in value):
             raise ValueError("users must be a set of non-empty strings")
         self._jsonobject.setdefault("editors", {})["users"] = list(value)
-        self._mark_dirty()
+        self._mark_dirty('editors')
         
     @property
     def range(self) -> GridRange:
@@ -244,13 +258,95 @@ class ProtectedRange:
         if not isinstance(value, GridRange):
             raise TypeError("value must be a GridRange or dict/json representing GridRange")
         self._jsonobject['range'] = value.to_json()
-        self._mark_dirty()
+        self._mark_dirty('range')
         
     def request_json(self) -> dict[str, Any]:
         keys_to_remove = {'namedRangeId', 'tableId'}
         writing_json = {k: v for k, v in self._jsonobject.items() if k not in keys_to_remove}
         return writing_json
-
+    
+class SheetDeveloperMetadata(MutableMapping):
+    _sheet_id: int
+    _metadata_id: int | None
+    _data: dict[str, str]
+    _snapshot: dict[str, str]
+    
+    def __init__(self, sheet_id: int, id: int | None = None, data: dict[str, str] | None = None) -> None:
+        self._sheet_id = sheet_id
+        self._metadata_id = id
+        self._data = dict(data or {})
+        self._snapshot = dict(data or {})
+        
+    @classmethod
+    def from_json(cls, jsonobject: dict[str, Any]) -> "SheetDeveloperMetadata":
+        return cls(
+            sheet_id=jsonobject['location']['sheetId'],
+            id=jsonobject.get('metadataId'),
+            data=json.loads(jsonobject['metadataValue'])
+        )
+    
+    def to_json(self):
+        data = {
+            "metadataKey": type(self).__name__,
+            "metadataValue": json.dumps(self._data),
+            "location": {"sheetId": self._sheet_id}
+        }
+        if self._metadata_id is not None:
+            data['metadataId'] = self._metadata_id
+        return data
+    
+    def request_json(self):
+        keys_to_remove = {'location'}
+        writing_json = {k: v for k, v in self.to_json() if k not in keys_to_remove}
+        return writing_json
+    
+    @property
+    def is_dirty(self):
+        return self._data != self._snapshot
+    
+    def mark_clean(self):
+        self._snapshot = dict(self._data)
+        
+    def push(self):
+        pass
+        
+    @property
+    def sheet_id(self) -> int:
+        return self._sheet_id
+    
+    @property
+    def id(self) -> int | None:
+        return self._metadata_id
+    
+    @id.setter
+    def id(self, value: int) -> None:
+        if self._metadata_id is not None and self._metadata_id != value:
+            raise ValueError(f"metadata_id already set to {self._metadata_id}")
+        if not isinstance(value, int):
+            raise TypeError("value must be of type int")
+        self._metadata_id = value
+    
+    def __getitem__(self, key):
+        return self._data.__getitem__(key)
+    
+    def __setitem__(self, key: str, value: str) -> None:
+        if not isinstance(key, str):
+            raise TypeError("key must be of type str")
+        if not isinstance(value, str):
+            raise TypeError("value must be of type str")
+        return self._data.__setitem__(key, value)
+        
+    def __delitem__(self, key):
+        return self._data.__delitem__(key)
+        
+    def __contains__(self, key: object) -> bool:
+        return self._data.__contains__(key)
+    
+    def __iter__(self) -> Iterator:
+        return self._data.__iter__()
+    
+    def __len__(self) -> int:
+        return self._data.__len__() 
 
 @dataclass(frozen=True)
 class DropDownValidationRule:
@@ -362,17 +458,25 @@ class FetchedRange:
             range_name=self.grid_range.to_a1_notation(sheet_title=sheet_title),
             values=self.current
         )
+        
+# ===================================================================================================
     
-class Sheet:
+class Sheet(TrackedModel):
     
-    # TODO add properties for dimensions
-    
-    def __init__(self, spreadsheet: "Spreadsheet", jsonsheet: dict[str, Any]):
+    def __init__(self, spreadsheet: "Spreadsheet", jsonsheet: dict[str, Any], is_dirty: bool = False):
+        super().__init__(is_dirty)
         self.spreadsheet = spreadsheet
         self._jsonsheet: dict[str, Any] = copy.deepcopy(jsonsheet)
-        self._is_dirty = False
         self.stale = False
         
+    def _check_stale(self):
+        if self.stale:
+            raise ValueError("instance is stale. Sync first.")
+        
+    def mark_clean(self):
+        super().mark_clean()
+        self.stale = False
+
     @property
     def id(self) -> int:
         return self._jsonsheet["properties"]["sheetId"]
@@ -382,11 +486,62 @@ class Sheet:
         return self._jsonsheet["properties"]["title"]
     
     @title.setter
-    def title(self, value) -> None:
+    def title(self, value: str) -> None:
         if not isinstance(value, str) or not value:
             raise ValueError("title must be a non-empty string")
+        for sheet in self.spreadsheet.sheets:
+            if sheet.title == value and sheet != self:
+                raise ValueError("title already present in spreadsheet")
         self._jsonsheet["properties"]["title"] = value
-        self._is_dirty = True
+        self._mark_dirty('properties.title')
+        
+    @property
+    def row_count(self) -> int:
+        return self._jsonsheet["properties"]["gridProperties"]["rowCount"]
+    
+    @row_count.setter
+    def row_count(self, value: int) -> None:
+        self._check_stale()
+        if not isinstance(value, int):
+            raise TypeError("row_count must be an integer")
+        self._jsonsheet["properties"]["gridProperties"]["rowCount"] = value
+        self._mark_dirty("properties.gridProperties.rowCount")
+    
+    @property
+    def column_count(self) -> int:
+        return self._jsonsheet["properties"]["gridProperties"]["columnCount"]
+    
+    @column_count.setter
+    def column_count(self, value: int) -> None:
+        self._check_stale()
+        if not isinstance(value, int):
+            raise TypeError("column_count must be an integer")
+        self._jsonsheet["properties"]["gridProperties"]["columnCount"] = value
+        self._mark_dirty("properties.gridProperties.columnCount")
+    
+    @property
+    def frozen_row_count(self) -> int:
+        return self._jsonsheet["properties"]["gridProperties"].get('frozenRowCount', 0)
+    
+    @frozen_row_count.setter
+    def frozen_row_count(self, value: int) -> None:
+        self._check_stale()
+        if not isinstance(value, int):
+            raise TypeError("frozen_row_count must be an integer")
+        self._jsonsheet["properties"]["gridProperties"]["frozenRowCount"] = value
+        self._mark_dirty("properties.gridProperties.frozenRowCount")
+        
+    @property
+    def frozen_column_count(self) -> int:
+        return self._jsonsheet["properties"]["gridProperties"].get('frozenColumnCount', 0)
+
+    @frozen_column_count.setter
+    def frozen_column_count(self, value: int) -> None:
+        self._check_stale()
+        if not isinstance(value, int):
+            raise TypeError("frozen_column_count must be an integer")
+        self._jsonsheet["properties"]["gridProperties"]["frozenColumnCount"] = value
+        self._mark_dirty("properties.gridProperties.frozenColumnCount")
     
     def apply_data_validation(self, validation: DataValidation):
         raise NotImplementedError()
@@ -396,76 +551,103 @@ class Sheet:
         return self.spreadsheet.protected_ranges[self.id]
     
     def add_protected_range(self, protected_range: ProtectedRange):
-        # check if sheet_ids match
         if self.id != protected_range.range.sheet_id:
             raise ValueError(f"sheet_id do not match: self = {self.id} vs. protectedRange = {protected_range.range.sheet_id}")
         self.spreadsheet.add_protected_range(protected_range)
     
     def remove_protected_range(self, protected_range: ProtectedRange):
-        # check if sheet_ids match
         if self.id != protected_range.range.sheet_id:
             raise ValueError(f"sheet_id do not match: self = {self.id} vs. protectedRange = {protected_range.range.sheet_id}")
         if protected_range.id is None:
             raise ValueError("cannot remove protected range without id (not synced yet)")
         self.spreadsheet.remove_protected_range(protected_range_id=protected_range.id)
+        
+    @property
+    def developer_metadata(self) -> SheetDeveloperMetadata:
+        return self.spreadsheet._developerMetadata[self.id]
     
     def get_values(self, grid_range: GridRange | None = None):
         # get all values immediately
         raise NotImplementedError()
     
     def set_values(self, value_range: ValueRange):
-        # not possible when staled
+        self._check_stale()
         # if sheet_title is present, should match actual titel
         raise NotImplementedError()
     
     def copy_paste(self, source: GridRange, destination: GridRange):
+        self._check_stale()
         # queue a copy paste request
         # make instance stale to prevent further changes until pushed
         raise NotImplementedError()
-    
-    @property
-    def is_dirty(self) -> bool:
-        return self._is_dirty
-    
-    def mark_clean(self):
-        self._is_dirty = False
-        self.stale = False
         
     
     
     
     # TODO integrate values via Fetched objects and also introduce stale flag for copy&pasting into the sheet. Do this on spreadsheet level?
-    # TODO when stale, no changes should be possible to a sheet
     # TODO get functions 
-
-    # TODO developerMetadata jsonsheet['developerMetadata'] (array) (ONLY WHEN INCLUDING VALUES! Otherwise use metadata endpoint)
     # TODO values?!
 
 class Spreadsheet:
     
+    _id: str
+    _url: str
+    _propertiesjson: dict[str, Any]
+    
     _sheets: list[Sheet]
     _original_sheet_order: list[int]
+    _duplicate_sheet_requests: list[dict[str, Any]]
     
-    _protected_ranges: dict[int, set[ProtectedRange]]  # added ranges have id = None
-    _removing_protected_range_ids: set[int]
+    _protected_ranges: dict[int, set[ProtectedRange]]
+    _removing_protected_range_ids: dict[int, set[int]]
     
-    # TODO developerMetadata
+    _developerMetadata: dict[int, SheetDeveloperMetadata]
     
-    def __init__(self, id: str, url: str, jsonobject: dict[str, Any]) -> None:
-        self._id: str = id
-        self._url: str = url
-        self._propertiesjson: dict[str, Any] = copy.deepcopy(jsonobject['properties'])
+    def __init__(self, gspreadsheets_client, spreadsheet_id: str) -> None:
+        self._gspreadsheets_client = gspreadsheets_client
+        fields = "spreadsheetId,spreadsheetUrl,properties,sheets.properties,sheets.protectedRanges,sheets.developerMetadata"
+        spreadsheet_json: dict[str, Any] = self._gspreadsheets_client.get(
+            spreadsheetId=spreadsheet_id,
+            fields=fields
+        )
+        
+        self._id: str = spreadsheet_json['spreadsheetId']
+        self._url: str = spreadsheet_json['spreadsheetUrl']
+        self._propertiesjson: dict[str, Any] = spreadsheet_json['properties']
         
         self._sheets: list[Sheet] = []
         self._protected_ranges: dict[int, set[ProtectedRange]] = {}
-        for sheet_json in jsonobject['sheets']:
+        self._removing_protected_range_ids: dict[int, set[int]] = {}
+        self._developerMetadata: dict[int, SheetDeveloperMetadata] = {}
+        for sheet_json in spreadsheet_json['sheets']:
             sheet_id = sheet_json['properties']['sheetId']
-            protected_ranges = {ProtectedRange.from_json(d) for d in sheet_json.get('protectedRanges', {})}
-            self._protected_ranges[sheet_id] = protected_ranges
-        self._removing_protected_range_ids: set[int] = set()
-        self._original_sheet_order: list[int] = [s.id for s in self._sheets]
+            self._protected_ranges[sheet_id] = {ProtectedRange.from_json(d) for d in sheet_json.get('protectedRanges', {})}
+            self._removing_protected_range_ids[sheet_id] = set()
+            sheet_developer_metadata_json = sheet_json.get('developerMetadata', [{}])[0]
+            self._developerMetadata[sheet_id] = (
+                SheetDeveloperMetadata.from_json(sheet_developer_metadata_json) 
+                if sheet_developer_metadata_json else SheetDeveloperMetadata(sheet_id))
 
+        self._original_sheet_order: list[int] = [s.id for s in self._sheets]
+        
+        
         # TODO load data via values endpoint
+        
+    # =========================================================================================================
+    
+    @property
+    def id(self) -> str:
+        return self._id
+    
+    @property
+    def title(self) -> str:
+        return self._propertiesjson["properties"]["title"]
+    
+    @property
+    def url(self) -> str:
+        return self._url
+    
+    # =========================================================================================================
         
     @property
     def sheets(self) -> tuple[Sheet, ...]:
@@ -483,6 +665,21 @@ class Spreadsheet:
             raise ValueError("sheet_ids must contain exactly the same ids as the current sheets")
         self._sheets = [self.get_sheet_by_id(sid) for sid in sheet_ids]
         
+    def duplicate_sheet(self, sheet_id: int, new_sheet_id: int | None, new_sheet_title: str | None):
+        self.get_sheet_by_id(sheet_id).stale = True
+        # TODO choose a new_sheet_id if None
+        # TODO create a duplicate method in Sheet that duplicates the json as well as values if any are loaded
+        raise NotImplementedError()
+        
+    def remove_sheet(self, sheet_id: int):
+        sheet = self.get_sheet_by_id(sheet_id)
+        self._original_sheet_order.remove(sheet_id)
+        self._sheets.remove(sheet)
+        del self._protected_ranges[sheet_id]
+        # TODO queue delete request?
+        
+    # =========================================================================================================
+        
     @property
     def protected_ranges(self) -> dict[int, tuple[ProtectedRange, ...]]:
         return {k: tuple(self._protected_ranges[k]) for k in self._protected_ranges}
@@ -491,42 +688,42 @@ class Spreadsheet:
         existing_ids = {pr.id for prs in self._protected_ranges.values() for pr in prs if pr.id is not None}
         if protected_range.id in existing_ids:
             raise ValueError("id already taken")
-        self._protected_ranges.setdefault(protected_range.range.sheet_id, set()).add(protected_range)
+        if protected_range.range.sheet_id not in self._protected_ranges:
+            raise ValueError("sheet of this protected_range is not part of this spreadsheet")
+        self._protected_ranges[protected_range.range.sheet_id].add(protected_range)
         
     def remove_protected_range(self, protected_range_id: int):
-        for pr_list in self._protected_ranges.values():
-            for pr in pr_list:
-                if protected_range_id == pr.id:
-                    self._removing_protected_range_ids.add(protected_range_id)
-                    pr_list.remove(pr)
+        for sheet_id, protected_ranges in self._protected_ranges.items():
+            for protected_range in protected_ranges:
+                if protected_range_id == protected_range.id:
+                    self._removing_protected_range_ids[sheet_id].add(protected_range_id)
+                    protected_ranges.remove(protected_range)
                     return
         raise KeyError(f"id {protected_range_id} not found")
     
-    @property
-    def id(self) -> str:
-        return self._id
+    # =========================================================================================================
     
-    @property
-    def title(self) -> str:
-        return self._propertiesjson["properties"]["title"]
+    def sheet_developer_metadata(self) -> dict[int, SheetDeveloperMetadata]:
+        return dict(self._developerMetadata)
     
-    @property
-    def url(self) -> str:
-        return self._url
-    
-    @title.setter
-    def title(self, value) -> None:
-        if not isinstance(value, str) or not value:
-            raise ValueError("title must be a non-empty string")
-        self._propertiesjson["properties"]["title"] = value
+    # =========================================================================================================
         
-    def fetch(self, include_data=False):
-        pass
+    def fetch(self):
+        self.__init__(self._gspreadsheets_client, self.id)
     
     def push(self):
-        # update spreadsheet if dirty
+        batch_updates: dict[int, list[dict[str, Any]]] = {}
+        
+        for sheet in self._sheets:
+            sheet_batch_updates: list[dict[str, Any]] = []
+            if sheet.is_dirty:
+                # TODO wo soll die Verantwortlichkeit für die requests sein? Bei den Objekten selbst oder hier?
+                pass
+                
+        
+        
         # update sheet properties if dirty
-        # update protected ranges (we might want to block changes bc of stale as well here)
+        # update protected ranges
         # update developerMetadata
         # make duplicate sheet stuff
         # make copy & paste stuff
@@ -534,9 +731,23 @@ class Spreadsheet:
         
         # possibly do for each sheet individually. 
         # The sheets should provide the batch requests and spreadsheet should execute them
-        pass
+    
+    def _batch_update(self, requests: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not requests:
+            return []
+        response = self._gspreadsheets_client.batchUpdate(
+            spreadsheetId=self.id,
+            body={
+                "requests": requests
+            }
+        )
+        return response
         
-    def update_request(self):
+        
+    def _batch_values_update(self, requests: list[dict[str, Any]]):
+        raise NotImplementedError()
+        
+    def _build_requests(self):
         requests = []
         
         # properties
@@ -555,11 +766,5 @@ class Spreadsheet:
         
         return requests
         
-    def duplicate_sheet(self, sheet_id: int):
-        self.get_sheet_by_id(sheet_id).stale = True
-        raise NotImplementedError()
-    
-    def remove_sheet(self, sheet_id: int):
-        raise NotImplementedError()
 
     
