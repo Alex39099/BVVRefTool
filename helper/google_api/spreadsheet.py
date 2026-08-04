@@ -203,6 +203,23 @@ class GridRange:
         if isinstance(key, str):
             return self.contains_a1(key)
         raise TypeError("key must be of type tuple[int, int] or str")
+    
+    def overlaps(self, other: GridRange):
+        if self.sheet_id != other.sheet_id:
+            return False
+        
+        def overlaps_1d(a_start: int | None, a_end: int | None, b_start: int | None, b_end: int | None) -> bool:
+            # None means unbounded — treat as 0 for start, infinity for end
+            a_s = a_start if a_start is not None else 0
+            b_s = b_start if b_start is not None else 0
+            a_e = a_end if a_end is not None else float("inf")
+            b_e = b_end if b_end is not None else float("inf")
+            return a_s <= b_e and b_s <= a_e
+
+        return (
+            overlaps_1d(self.start_row_idx, self.end_row_idx, other.start_row_idx, other.end_row_idx) and
+            overlaps_1d(self.start_column_idx, self.end_column_idx, other.start_column_idx, other.end_column_idx)
+        )
 
        
 class ProtectedRange(TrackedModel):
@@ -643,6 +660,7 @@ class Sheet(TrackedModel):
         self.spreadsheet = spreadsheet
         self._propertiesjson: dict[str, Any] = copy.deepcopy(propertiesjson)
         self.stale: bool = False
+        self._initial_title: str = self.title
         self._initial_row_count: int = self.row_count
         self._initial_column_count: int = self.column_count
         self.fetched_values: FetchedRange | None = fetched_values
@@ -673,7 +691,7 @@ class Sheet(TrackedModel):
     def fetch_values(self):
         raw = self.spreadsheet._gspreadsheets_client.values().get(
             spreadsheetId=self.spreadsheet.id,
-            range=self.grid_range.to_a1_notation(self.title)
+            range=self.grid_range.to_a1_notation(self._initial_title)
         )
         value_range = ValueRange.from_json(raw)
         self.fetched_values = FetchedRange.from_value_range(sheet=self, value_range=value_range)
@@ -705,6 +723,7 @@ class Sheet(TrackedModel):
     def mark_clean(self) -> None:
         super().mark_clean()
         self.stale = False
+        self._initial_title = self.title
         self._initial_row_count = self.row_count
         self._initial_column_count = self.column_count
         self._from_duplicate = False
@@ -842,11 +861,25 @@ class Sheet(TrackedModel):
     def developer_metadata(self) -> SheetDeveloperMetadata:
         return self.spreadsheet._developerMetadata[self.id]
     
-    def copy_paste(self, source: GridRange, destination: GridRange):
+    def copy_paste(self, source: GridRange, destinations: list[GridRange]):
+        """ Immediately copy&pastes a source range to (multiple) destinations. Fetches values afterwards.
+
+        Args:
+            source (GridRange): source to copy from
+            destinations (list[GridRange]): list of destinations to copy source to (must not overlap with source)
+
+        Raises:
+            ValueError: sheet is stale, fetched values are dirty, gridRanges outside the sheet or if source and destinations overlap.
+        """
         self.raise_for_stale()
-        # queue a copy paste request
-        # make instance stale to prevent further changes until pushed
-        raise NotImplementedError()
+        if self.is_value_dirty:
+            raise ValueError("cannot copy&paste if values are dirty. Sync to cloud first.")
+        if any(grid_range.sheet_id != self.id for grid_range in [source] + destinations):
+            raise ValueError("can only copy within this sheet")
+        if any(source.overlaps(destination) for destination in destinations):
+            raise ValueError("destinations must not overlap with source")
+        self.spreadsheet._copy_paste(source, destinations)
+        self.fetch_values()
 
 class Spreadsheet:
     
@@ -881,7 +914,9 @@ class Spreadsheet:
         self._removing_protected_range_ids: dict[int, set[int]] = {}
         self._developerMetadata: dict[int, SheetDeveloperMetadata] = {}
         for sheet_json in spreadsheet_json['sheets']:
-            sheet_id = sheet_json['properties']['sheetId']
+            sheet = Sheet(spreadsheet=self, propertiesjson=sheet_json['properties'])
+            self._sheets.append(sheet)
+            sheet_id = sheet.id
             self._protected_ranges[sheet_id] = {ProtectedRange.from_json(d) for d in sheet_json.get('protectedRanges', {})}
             self._removing_protected_range_ids[sheet_id] = set()
             sheet_developer_metadata_json = sheet_json.get('developerMetadata', [{}])[0]
@@ -1054,8 +1089,6 @@ class Spreadsheet:
         self._batch_values_update(list(chain.from_iterable(batch_values_update.values())))
         for sheet in batch_values_update:
             sheet.mark_value_clean()
-            
-        # TODO copy & paste requests
         
         # sheet duplication requests
         batch_updates.clear()
@@ -1124,7 +1157,7 @@ class Spreadsheet:
                     }
                 }
                 
-                if len(developerMetadata) == 0:
+                if not developerMetadata:
                     # metadata empty, remove
                     batch_meta_updates.setdefault(sheet_id, []).append({
                         "deleteDeveloperMetadata": {
@@ -1142,7 +1175,7 @@ class Spreadsheet:
                     })
                 continue
             # developerMetadata does not exist, create if not empty
-            if len(developerMetadata) != 0:
+            if developerMetadata:
                 batch_meta_updates.setdefault(sheet_id, []).append({
                     "createDeveloperMetadata": {
                         "developerMetadata": developerMetadata.request_json
@@ -1182,4 +1215,17 @@ class Spreadsheet:
         }
         response = self._gspreadsheets_client.values().batchUpdate(body)
         return response
+    
+    def _copy_paste(self, source: GridRange, destinations: list[GridRange], paste_type: str = "PASTE_NORMAL"):
+        requests = [{
+                "copyPaste": {
+                    "source": source.to_json(),
+                    "destination": dst.to_json(),
+                    "pasteType": paste_type,
+                    "pasteOrientation": "NORMAL",
+                }
+            }
+            for dst in destinations
+        ]
+        return self._batch_update(requests)
     
