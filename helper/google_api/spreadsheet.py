@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from itertools import chain
 from typing import Any
 
+from google.auth.credentials import Credentials as BaseCredentials
+from googleapiclient.discovery import build
+
 
 class TrackedModel:
     _WILDCARD_FIELD = "*"
@@ -23,6 +26,7 @@ class TrackedModel:
         self._dirty_fields.add(field_name)
         
     def mark_clean(self):
+        """ Marks this instance clean (=synced to cloud) """
         self._dirty_fields.clear()
         
     @property
@@ -31,6 +35,11 @@ class TrackedModel:
         
     @property
     def dirty_field_mask(self) -> str:
+        """ Returns the field mask of all dirty fields
+
+        Returns:
+            str: field mask for batchUpdate requests
+        """
         if self._WILDCARD_FIELD in self._dirty_fields:
             return self._WILDCARD_FIELD
         field_mask = ",".join(self._dirty_fields)
@@ -124,6 +133,14 @@ class GridRange:
         )
         
     def to_a1_notation(self, sheet_title: str | None = None) -> str:
+        """ Constructs the A1 notation of this GridRange
+
+        Args:
+            sheet_title (str | None, optional): sheet_title. Defaults to None (first sheet of spreadsheet)
+
+        Returns:
+            str: _description_
+        """
         def _idx_to_col(idx: int) -> str:
             result = ""
             while True:
@@ -154,6 +171,11 @@ class GridRange:
         )
     
     def to_json(self) -> dict[str, int]:
+        """ Returns the json representation of this gridRange. None values are not included.
+
+        Returns:
+            dict[str, int]: json representation of this gridRange without None values.
+        """
         data = {"sheetId": self.sheet_id}
         if self.start_row_idx is not None:
             data['startRowIndex'] = self.start_row_idx
@@ -167,6 +189,15 @@ class GridRange:
         return data
     
     def contains_idx(self, row_idx: int, col_idx: int) -> bool:
+        """ Check if the given index is within this gridRange
+
+        Args:
+            row_idx (int): row index
+            col_idx (int): column index
+
+        Returns:
+            bool: True if the indices are both within self
+        """
         if not isinstance(row_idx, int) or not isinstance(col_idx, int):
             raise TypeError("row_idx and col_idx must be of type int")
         if self.start_row_idx is not None and row_idx < self.start_row_idx:
@@ -178,6 +209,14 @@ class GridRange:
         return not (self.end_column_idx is not None and col_idx > self.end_column_idx)
     
     def contains_grid_range(self, other: GridRange) -> bool:
+        """ Check if the given gridRange is fully within this gridRange
+
+        Args:
+            other (GridRange): the other gridRange
+
+        Returns:
+            bool: True if other is fully within self
+        """
         if self.sheet_id != other.sheet_id:
             return False
         if (self.start_row_idx is not None and other.start_row_idx is not None and
@@ -192,6 +231,14 @@ class GridRange:
         return not (self.end_column_idx is not None and other.end_column_idx is not None and other.end_column_idx > self.end_column_idx)
     
     def contains_a1(self, a1_notation: str) -> bool:
+        """ Check if the given a1_notation is within this gridRange
+
+        Args:
+            a1_notation (str): the a1 notation
+
+        Returns:
+            bool: True if the given range is fully within self
+        """
         other = GridRange.from_a1_notation(sheet_id=self.sheet_id, range_name=a1_notation)
         return self.contains_grid_range(other)
     
@@ -204,7 +251,15 @@ class GridRange:
             return self.contains_a1(key)
         raise TypeError("key must be of type tuple[int, int] or str")
     
-    def overlaps(self, other: GridRange):
+    def overlaps(self, other: GridRange) -> bool:
+        """ Check if the given gridRange overlaps with this gridRange
+
+        Args:
+            other (GridRange): the other gridRange
+
+        Returns:
+            bool: True if self and other overlap
+        """
         if self.sheet_id != other.sheet_id:
             return False
         
@@ -227,10 +282,20 @@ class ProtectedRange(TrackedModel):
     _jsonobject: dict[str, Any]
     
     def __init__(self, jsonobject: dict[str, Any] | None = None, range: GridRange | dict[str, int] | None = None, is_dirty: bool = True):
+        """ Constructs a new ProtectedRange
+
+        Args:
+            jsonobject (dict[str, Any] | None, optional): the cloud jsonobject. This takes precedence over range param. Defaults to None. 
+            range (GridRange | dict[str, int] | None, optional): gridRange of this protected range. Defaults to None.
+            is_dirty (bool, optional): True if this protectedRange is not yet synced. Defaults to True.
+
+        Raises:
+            ValueError: if no range was specfied, either via jsonobject or range.
+        """
         super().__init__(is_dirty)
         self._jsonobject: dict[str, Any] = {}
         if jsonobject is not None:
-            self._jsonobject: dict[str, Any] = json.loads(json.dumps(self._jsonobject))
+            self._jsonobject: dict[str, Any] = json.loads(json.dumps(jsonobject))
         elif range is not None:
             if isinstance(range, dict):
                 range = GridRange.from_json(range)
@@ -239,7 +304,7 @@ class ProtectedRange(TrackedModel):
             raise ValueError("either jsonobject or range must be set")
             
         if not self._jsonobject.get("range"):
-            raise ValueError("missing range")
+            raise ValueError(f"missing range: {self._jsonobject}")
         
         self._jsonobject.setdefault("description", "")
         self._jsonobject.setdefault("editors", {"groups": [], "users": []})
@@ -248,14 +313,26 @@ class ProtectedRange(TrackedModel):
         
     @classmethod
     def from_json(cls, jsonobject: dict[str, Any], is_dirty: bool = False) -> ProtectedRange:
+        """ Construct a protectedRange from the json representation
+
+        Args:
+            jsonobject (dict[str, Any]): json representation of the protectedRange
+            is_dirty (bool, optional): False if this protectedRange is synced with cloud. Defaults to False.
+
+        Returns:
+            ProtectedRange: _description_
+        """
         return cls(jsonobject, is_dirty = is_dirty)
     
-    def to_json(self):
-        # return a copy
+    def to_json(self) -> dict[str, Any]:
+        """ Returns the full json representation of this protectedRange.
+
+        Returns:
+            dict[str, Any]: json object of this protected Range
+        """
         return json.loads(json.dumps(self._jsonobject))
         
     def _copy_to(self, sheet_id: int) -> ProtectedRange:
-        """ Internal. Use Spreadsheet methods instead. """
         json_copy = json.loads(json.dumps(self._jsonobject))
         json_copy['range']['sheetId'] = sheet_id
         if 'protectedRangeId' in json_copy:
@@ -342,12 +419,21 @@ class ProtectedRange(TrackedModel):
         return writing_json
     
 class SheetDeveloperMetadata(MutableMapping):
+    METADATA_KEY = "SheetDeveloperMetadata"
+    
     _sheet_id: int
     _metadata_id: int | None
     _data: dict[str, str]
     _snapshot: dict[str, str]
     
     def __init__(self, sheet_id: int, id: int | None = None, data: dict[str, str] | None = None) -> None:
+        """ Constructs a SheetDeveloperMetadata.
+
+        Args:
+            sheet_id (int): the id of the sheet this metadata belongs to.
+            id (int | None, optional): Internal. Do not set.
+            data (dict[str, str] | None, optional): data of the metadata. Defaults to an empty dict.
+        """
         self._sheet_id = sheet_id
         self._metadata_id = id
         self._data = dict(data or {})
@@ -369,7 +455,7 @@ class SheetDeveloperMetadata(MutableMapping):
     
     def to_json(self):
         data = {
-            "metadataKey": type(self).__name__,
+            "metadataKey": self.METADATA_KEY,
             "metadataValue": json.dumps(self._data),
             "location": {"sheetId": self._sheet_id}
         }
@@ -509,6 +595,16 @@ class FetchedRange:
     current: list[list[CellValue]] # mutable — local changes
     
     def __init__(self, sheet: Sheet, grid_range: GridRange, fetched_values: list[list[CellValue]]) -> None:
+        """ Constructs a FetchedRange.
+
+        Args:
+            sheet (Sheet): the sheet this FetchedRange belongs to
+            grid_range (GridRange): a fully bound GridRange of the given sheet
+            fetched_values (list[list[CellValue]]): the fetched values
+
+        Raises:
+            ValueError: if the gridRange is not bound in every direction
+        """
         self._sheet = sheet
         self._grid_range = grid_range
         if any(v is None for v in (
@@ -537,6 +633,15 @@ class FetchedRange:
 
     @classmethod
     def from_value_range(cls, sheet: Sheet, value_range: ValueRange) -> FetchedRange:
+        """ Create a FetchedRange from ValueRange
+
+        Args:
+            sheet (Sheet): the sheet from which the values were taken
+            value_range (ValueRange): the values
+
+        Returns:
+            FetchedRange: instance of FetchedRange
+        """
         return cls(
             sheet=sheet,
             grid_range=GridRange.from_a1_notation(sheet_id=sheet.id, range_name=value_range.range_name),
@@ -551,6 +656,7 @@ class FetchedRange:
         self._snapshot = copy.deepcopy(self.current)
         
     def apply_sheet_bounds(self):
+        """ Applies the current sheet bounds to the underlying GridRange """
         assert self._grid_range.start_row_idx is not None
         assert self._grid_range.start_column_idx is not None
         assert self._grid_range.end_row_idx is not None
@@ -580,7 +686,8 @@ class FetchedRange:
             start_column_idx=self._grid_range.start_column_idx,
             end_column_idx=min(sheet_col_count - 1, self._grid_range.end_column_idx)
         )
-        
+    
+    @property
     def dirty_cells(self) -> list[ValueRange]:
         result = []
         for r, row in enumerate(self.current):
@@ -682,17 +789,36 @@ class Sheet(TrackedModel):
         return new_sheet
     
     def duplicate(self, new_sheet_id: int | None, new_sheet_title: str | None) -> Sheet:
+        """ Duplicates this sheet within the spreadsheet
+
+        Args:
+            new_sheet_id (int | None): id of the new sheet. Defaults to some random id.
+            new_sheet_title (str | None): title of the new sheet. Defaults to "Copy of self.title".
+
+        Returns:
+            Sheet: the duplicated sheet
+        """
         return self.spreadsheet.duplicate_sheet(
             source_sheet_id=self.id, 
             new_sheet_id=new_sheet_id, 
             new_sheet_title=new_sheet_title
         )
         
-    def fetch_values(self):
+    def fetch_values(self, overwrite_local_changes: bool = True):
+        """ Fetches all values of the spreadsheet.
+
+        Args:
+            overwrite_local_changes (bool, optional): _description_. Defaults to True.
+
+        Raises:
+            ValueError: if there are local value changes and overwrite_local_changes is False
+        """
+        if not overwrite_local_changes and self.is_value_dirty:
+            raise ValueError("There are local value changes and overwrite_local_changes is False")
         raw = self.spreadsheet._gspreadsheets_client.values().get(
             spreadsheetId=self.spreadsheet.id,
             range=self.grid_range.to_a1_notation(self._initial_title)
-        )
+        ).execute()
         value_range = ValueRange.from_json(raw)
         self.fetched_values = FetchedRange.from_value_range(sheet=self, value_range=value_range)
         
@@ -846,11 +972,27 @@ class Sheet(TrackedModel):
         return self.spreadsheet.protected_ranges[self.id]
     
     def add_protected_range(self, protected_range: ProtectedRange):
+        """ Adds a protected range to this sheet.
+
+        Args:
+            protected_range (ProtectedRange): the protected range
+
+        Raises:
+            ValueError: if the protected range does not belong to this sheet.
+        """
         if self.id != protected_range.range.sheet_id:
             raise ValueError(f"sheet_id do not match: self = {self.id} vs. protectedRange = {protected_range.range.sheet_id}")
         self.spreadsheet.add_protected_range(protected_range)
     
     def remove_protected_range(self, protected_range: ProtectedRange):
+        """ Removes a protected range from this sheet.
+
+        Args:
+            protected_range (ProtectedRange): the protected range
+
+        Raises:
+            ValueError: if the protected range does not belong to this sheet or was not synced to cloud yet.
+        """
         if self.id != protected_range.range.sheet_id:
             raise ValueError(f"sheet_id do not match: self = {self.id} vs. protectedRange = {protected_range.range.sheet_id}")
         if protected_range.id is None:
@@ -900,18 +1042,20 @@ class Spreadsheet:
     _developerMetadata: dict[int, SheetDeveloperMetadata]
     
     def __init__(self, gspreadsheets_client, spreadsheet_id: str) -> None:
+        """ Internal only. Use Spreadsheet.from_cloud. """
         self._gspreadsheets_client = gspreadsheets_client
         fields = "spreadsheetId,spreadsheetUrl,properties,sheets.properties,sheets.protectedRanges,sheets.developerMetadata"
         spreadsheet_json: dict[str, Any] = self._gspreadsheets_client.get(
             spreadsheetId=spreadsheet_id,
             fields=fields
-        )
+        ).execute()
         
         self._id: str = spreadsheet_json['spreadsheetId']
         self._url: str = spreadsheet_json['spreadsheetUrl']
         self._propertiesjson: dict[str, Any] = spreadsheet_json['properties']
         
         self._sheets: list[Sheet] = []
+        self._removing_sheet_ids: set[int] = set()
         self._protected_ranges: dict[int, set[ProtectedRange]] = {}
         self._removing_protected_range_ids: dict[int, set[int]] = {}
         self._developerMetadata: dict[int, SheetDeveloperMetadata] = {}
@@ -919,12 +1063,15 @@ class Spreadsheet:
             sheet = Sheet(spreadsheet=self, propertiesjson=sheet_json['properties'])
             self._sheets.append(sheet)
             sheet_id = sheet.id
-            self._protected_ranges[sheet_id] = {ProtectedRange.from_json(d) for d in sheet_json.get('protectedRanges', {})}
+            self._protected_ranges[sheet_id] = {ProtectedRange.from_json(d) for d in sheet_json.get('protectedRanges', [])}
             self._removing_protected_range_ids[sheet_id] = set()
             sheet_developer_metadata_json = sheet_json.get('developerMetadata', [{}])[0]
             self._developerMetadata[sheet_id] = (
                 SheetDeveloperMetadata.from_json(sheet_developer_metadata_json) 
-                if sheet_developer_metadata_json else SheetDeveloperMetadata(sheet_id))
+                if sheet_developer_metadata_json and 
+                sheet_developer_metadata_json['metadataKey'] == SheetDeveloperMetadata.METADATA_KEY 
+                else SheetDeveloperMetadata(sheet_id)
+            )
 
         self._original_sheet_order: list[int] = [s.id for s in self._sheets]
         self._duplicate_sheet_requests: list[dict[str, Any]] = []
@@ -950,12 +1097,47 @@ class Spreadsheet:
         return tuple(self._sheets)
     
     def get_sheet_by_id(self, sheet_id: int) -> Sheet:
+        """ Get a sheet by its id.
+
+        Args:
+            sheet_id (int): id of sheet
+
+        Raises:
+            IndexError: if there is no sheet with the given id
+
+        Returns:
+            Sheet: the sheet with the given id
+        """
         for sheet in self._sheets:
             if sheet.id == sheet_id:
                 return sheet
-        raise ValueError(f"no sheet with id {sheet_id}")
+        raise IndexError(f"no sheet with id {sheet_id}")
+    
+    def get_sheet_by_title(self, sheet_title: str) -> Sheet:
+        """ Get a sheet by its title.
+
+        Args:
+            sheet_title (str): title of sheet
+        Raises:
+            IndexError: if there is no sheet with the given title
+
+        Returns:
+            Sheet: the sheet with the given title
+        """
+        for sheet in self._sheets:
+            if sheet.title == sheet_title:
+                return sheet
+        raise IndexError(f"no sheet with title {sheet_title}")
     
     def reorder_sheets(self, sheet_ids: list[int]) -> None:
+        """ Reorders the current sheets by id
+
+        Args:
+            sheet_ids (list[int]): sheet ids in order
+
+        Raises:
+            ValueError: if sheet ids are missing
+        """
         current_ids = [s.id for s in self._sheets]
         if sorted(sheet_ids) != sorted(current_ids):
             raise ValueError("sheet_ids must contain exactly the same ids as the current sheets")
@@ -1006,6 +1188,11 @@ class Spreadsheet:
         return new_sheet
         
     def remove_sheet(self, sheet_id: int):
+        """ Removes a sheet from the spreadsheet.
+
+        Args:
+            sheet_id (int): id of the sheet
+        """
         sheet = self.get_sheet_by_id(sheet_id)
         sheet.raise_for_stale()
         self._original_sheet_order.remove(sheet_id)
@@ -1020,6 +1207,14 @@ class Spreadsheet:
         return {k: tuple(self._protected_ranges[k]) for k in self._protected_ranges}
         
     def add_protected_range(self, protected_range: ProtectedRange):
+        """ Adds a protected range to the spreadsheet
+
+        Args:
+            protected_range (ProtectedRange): the protected range to add
+
+        Raises:
+            ValueError: if the id is already taken or there is no sheet for this protected range
+        """
         existing_ids = {pr.id for prs in self._protected_ranges.values() for pr in prs if pr.id is not None}
         if protected_range.id in existing_ids:
             raise ValueError("id already taken")
@@ -1028,13 +1223,21 @@ class Spreadsheet:
         self._protected_ranges[protected_range.range.sheet_id].add(protected_range)
         
     def remove_protected_range(self, protected_range_id: int):
+        """ Removes a protected range from the spreadsheet.
+
+        Args:
+            protected_range_id (int): id of the protected range
+
+        Raises:
+            IndexError: if there is no protected range with the given id
+        """
         for sheet_id, protected_ranges in self._protected_ranges.items():
             for protected_range in protected_ranges:
                 if protected_range_id == protected_range.id:
                     self._removing_protected_range_ids[sheet_id].add(protected_range_id)
                     protected_ranges.remove(protected_range)
                     return
-        raise KeyError(f"id {protected_range_id} not found")
+        raise IndexError(f"id {protected_range_id} not found")
     
     # =========================================================================================================
     
@@ -1042,11 +1245,64 @@ class Spreadsheet:
         return dict(self._developerMetadata)
     
     # =========================================================================================================
+    
+    def __getitem__(self, key: int | str) -> Sheet:
+        if isinstance(key, int):
+            return self.get_sheet_by_id(key)
+        elif isinstance(key, str):
+            return self.get_sheet_by_title(key)
+        raise TypeError("key must be of type int or str")
+            
+    def __setitem__(self, key: int | str, value: Sheet) -> None:
+        raise NotImplementedError("use duplicate_sheet")
+        
+    def __delitem__(self, key: int | str):
+        if isinstance(key, int):
+            sheet_id = key
+        elif isinstance(key, str):
+            sheet_id = self.get_sheet_by_title(key).id
+        else:
+            raise TypeError("key must be of type int or str")
+        return self.remove_sheet(sheet_id)
+
+    def __contains__(self, key: object) -> bool:
+        try:
+            if isinstance(key, int):
+                return self.get_sheet_by_id(key) != None
+            elif isinstance(key, str):
+                return self.get_sheet_by_title(key) != None
+        except IndexError:
+            return False
+        raise TypeError("key must be of type int or str")
+
+    def __iter__(self) -> Iterator:
+        return iter(self.sheets)
+
+    def __len__(self) -> int:
+        return len(self._sheets)
+    
+    # =========================================================================================================
+    
+    @classmethod
+    def from_cloud(cls, gc_credentials: BaseCredentials, spreadsheet_id: str) -> Spreadsheet:
+        """ Loads a spreadsheet from Google Cloud
+
+        Args:
+            gc_credentials (BaseCredentials): authenticated Google Cloud credentials
+            spreadsheet_id (str): id of the spreadsheet
+
+        Returns:
+            Spreadsheet: the loaded spreadsheet
+        """
+        gspreadsheet_client = build("sheets", "v4", credentials=gc_credentials).spreadsheets()
+        return cls(gspreadsheet_client, spreadsheet_id)
         
     def fetch(self):
+        """ Fetches the spreadsheet again from Cloud. Does override all local changes and rebuilds any subclasses """
         self.__init__(self._gspreadsheets_client, self.id)
     
     def push(self):
+        """ Pushes all local changes to the Cloud """
         # update values for smaller sheets bc we need to clear those ranges first
         already_existing_downscaled_sheets = {sheet for sheet in self._sheets if (
             sheet.id in set(self._original_sheet_order) and
@@ -1056,7 +1312,7 @@ class Spreadsheet:
         for sheet in already_existing_downscaled_sheets:
             if sheet.is_value_dirty:
                 assert sheet.fetched_values is not None
-                batch_values_update[sheet] = sheet.fetched_values.dirty_cells()
+                batch_values_update[sheet] = sheet.fetched_values.dirty_cells
         self._batch_values_update(list(chain.from_iterable(batch_values_update.values())))
         for sheet in batch_values_update:
             sheet.mark_value_clean()
@@ -1087,7 +1343,7 @@ class Spreadsheet:
              if sheet.id not in self._original_sheet_order:
                  continue
              assert sheet.fetched_values is not None
-             batch_values_update[sheet] = sheet.fetched_values.dirty_cells()
+             batch_values_update[sheet] = sheet.fetched_values.dirty_cells
         self._batch_values_update(list(chain.from_iterable(batch_values_update.values())))
         for sheet in batch_values_update:
             sheet.mark_value_clean()
@@ -1122,7 +1378,7 @@ class Spreadsheet:
             if not sheet.is_value_dirty:
                 continue
             assert sheet.fetched_values is not None
-            batch_values_update[sheet] = sheet.fetched_values.dirty_cells()
+            batch_values_update[sheet] = sheet.fetched_values.dirty_cells
         self._batch_values_update(list(chain.from_iterable(batch_values_update.values())))
         for sheet in batch_values_update:
             sheet.mark_value_clean()
@@ -1206,16 +1462,21 @@ class Spreadsheet:
             body={
                 "requests": requests
             }
-        )
+        ).execute()
         return response
         
     def _batch_values_update(self, value_ranges: list[ValueRange], value_input_option: str = "USER_ENTERED"):
+        if not value_ranges:
+            return []
         body = {
             "valueInputOption": value_input_option,
             "data": [vr.to_json() for vr in value_ranges],
             "includeValuesInResponse": False
         }
-        response = self._gspreadsheets_client.values().batchUpdate(body)
+        response = self._gspreadsheets_client.values().batchUpdate(
+            spreadsheetId=self.id,
+            body=body
+        ).execute()
         return response
     
     def _copy_paste(self, source: GridRange, destinations: list[GridRange], paste_type: str = "PASTE_NORMAL"):
