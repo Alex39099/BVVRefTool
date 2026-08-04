@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import copy
-from itertools import chain
 import json
 import random
 import re
 from collections.abc import Iterator, MutableMapping
 from dataclasses import dataclass
+from itertools import chain
 from typing import Any
 
 
@@ -869,9 +869,11 @@ class Sheet(TrackedModel):
             destinations (list[GridRange]): list of destinations to copy source to (must not overlap with source)
 
         Raises:
-            ValueError: sheet is stale, fetched values are dirty, gridRanges outside the sheet or if source and destinations overlap.
+            ValueError: sheet is stale or was recently duplicated, fetched values are dirty, gridRanges outside the sheet or if source and destinations overlap.
         """
         self.raise_for_stale()
+        if self._from_duplicate:
+            raise ValueError("sheet is not yet synced with cloud")
         if self.is_value_dirty:
             raise ValueError("cannot copy&paste if values are dirty. Sync to cloud first.")
         if any(grid_range.sheet_id != self.id for grid_range in [source] + destinations):
