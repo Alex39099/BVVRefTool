@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import copy
+from itertools import chain
 import json
+import random
 import re
 from collections.abc import Iterator, MutableMapping
 from dataclasses import dataclass
@@ -235,8 +237,10 @@ class ProtectedRange(TrackedModel):
         # return a copy
         return json.loads(json.dumps(self._jsonobject))
         
-    def copy(self) -> ProtectedRange:
+    def _copy_to(self, sheet_id: int) -> ProtectedRange:
+        """ Internal. Use Spreadsheet methods instead. """
         json_copy = json.loads(json.dumps(self._jsonobject))
+        json_copy['range']['sheetId'] = sheet_id
         if 'protectedRangeId' in json_copy:
             json_copy.pop('protectedRangeId')
         return ProtectedRange(jsonobject=json_copy, is_dirty=True)
@@ -314,6 +318,7 @@ class ProtectedRange(TrackedModel):
         self._jsonobject['range'] = value.to_json()
         self._mark_dirty('range')
         
+    @property
     def request_json(self) -> dict[str, Any]:
         keys_to_remove = {'namedRangeId', 'tableId'}
         writing_json = {k: v for k, v in self._jsonobject.items() if k not in keys_to_remove}
@@ -329,7 +334,7 @@ class SheetDeveloperMetadata(MutableMapping):
         self._sheet_id = sheet_id
         self._metadata_id = id
         self._data = dict(data or {})
-        self._snapshot = dict(data or {})
+        self._snapshot = dict(self._data or {})
         
     @classmethod
     def from_json(cls, jsonobject: dict[str, Any]) -> SheetDeveloperMetadata:
@@ -338,6 +343,12 @@ class SheetDeveloperMetadata(MutableMapping):
             id=jsonobject.get('metadataId'),
             data=json.loads(jsonobject['metadataValue'])
         )
+        
+    def _copy_to(self, sheet_id: int) -> SheetDeveloperMetadata:
+        """ Internal. Use Spreadsheet methods instead. """
+        new_metadata = SheetDeveloperMetadata(sheet_id=sheet_id, data=self._data)
+        new_metadata._snapshot = {}
+        return new_metadata
     
     def to_json(self):
         data = {
@@ -349,6 +360,7 @@ class SheetDeveloperMetadata(MutableMapping):
             data['metadataId'] = self._metadata_id
         return data
     
+    @property
     def request_json(self):
         keys_to_remove = {'location'}
         writing_json = {k: v for k, v in self.to_json() if k not in keys_to_remove}
@@ -361,8 +373,9 @@ class SheetDeveloperMetadata(MutableMapping):
     def mark_clean(self):
         self._snapshot = dict(self._data)
         
-    def push(self):
-        pass
+    @property
+    def dirty_field_mask(self):
+        return "metadataValue"
         
     @property
     def sheet_id(self) -> int:
@@ -400,7 +413,7 @@ class SheetDeveloperMetadata(MutableMapping):
         return self._data.__iter__()
     
     def __len__(self) -> int:
-        return self._data.__len__() 
+        return self._data.__len__()
 
 @dataclass(frozen=True)
 class DropDownValidationRule:
@@ -579,6 +592,7 @@ class FetchedRange:
         return result
         
     def _set_value(self, row: int, col: int, value: CellValue) -> None:
+        self._sheet.raise_for_stale()
         while len(self.current) <= row:
             self.current.append([])
         while len(self.current[row]) <= col:
@@ -623,14 +637,38 @@ class FetchedRange:
 # ===================================================================================================
     
 class Sheet(TrackedModel):
-    def __init__(self, spreadsheet: Spreadsheet, jsonsheet: dict[str, Any], fetched_values: FetchedRange | None = None, is_dirty: bool = False):
+    def __init__(self, spreadsheet: Spreadsheet, propertiesjson: dict[str, Any], fetched_values: FetchedRange | None = None, is_dirty: bool = False, from_duplicate: bool = False):
+        """ Internal. Use methods of Spreadsheet instead. """
         super().__init__(is_dirty)
         self.spreadsheet = spreadsheet
-        self._jsonsheet: dict[str, Any] = copy.deepcopy(jsonsheet)
+        self._propertiesjson: dict[str, Any] = copy.deepcopy(propertiesjson)
         self.stale: bool = False
         self._initial_row_count: int = self.row_count
         self._initial_column_count: int = self.column_count
         self.fetched_values: FetchedRange | None = fetched_values
+        self._from_duplicate: bool = False
+        
+    def _duplicate(self, new_sheet_id: int, new_sheet_title: str) -> Sheet:
+        self.stale = True
+        new_sheet = Sheet(
+            spreadsheet=self.spreadsheet,
+            propertiesjson=self.properties_json,
+            fetched_values=self.fetched_values,
+            is_dirty=True,
+            from_duplicate=True
+        )
+        new_sheet._set_id(new_sheet_id)
+        new_sheet.title = new_sheet_title
+        if new_sheet.fetched_values is not None:
+            new_sheet.fetched_values.mark_clean()
+        return new_sheet
+    
+    def duplicate(self, new_sheet_id: int | None, new_sheet_title: str | None) -> Sheet:
+        return self.spreadsheet.duplicate_sheet(
+            source_sheet_id=self.id, 
+            new_sheet_id=new_sheet_id, 
+            new_sheet_title=new_sheet_title
+        )
         
     def fetch_values(self):
         raw = self.spreadsheet._gspreadsheets_client.values().get(
@@ -667,6 +705,9 @@ class Sheet(TrackedModel):
     def mark_clean(self) -> None:
         super().mark_clean()
         self.stale = False
+        self._initial_row_count = self.row_count
+        self._initial_column_count = self.column_count
+        self._from_duplicate = False
         
     @property
     def is_value_dirty(self) -> bool:
@@ -675,14 +716,21 @@ class Sheet(TrackedModel):
     def mark_value_clean(self) -> None:
         if self.fetched_values is not None:
             self.fetched_values.mark_clean()
+            
+    @property
+    def properties_json(self) -> dict[str, Any]:
+        return copy.deepcopy(self._propertiesjson)
 
     @property
     def id(self) -> int:
-        return self._jsonsheet["properties"]["sheetId"]
+        return self._propertiesjson["sheetId"]
+    
+    def _set_id(self, value: int) -> None:
+        self._propertiesjson["sheetId"] = value
     
     @property
     def title(self) -> str:
-        return self._jsonsheet["properties"]["title"]
+        return self._propertiesjson["title"]
     
     @title.setter
     def title(self, value: str) -> None:
@@ -691,32 +739,44 @@ class Sheet(TrackedModel):
         for sheet in self.spreadsheet.sheets:
             if sheet.title == value and sheet != self:
                 raise ValueError("title already present in spreadsheet")
-        self._jsonsheet["properties"]["title"] = value
+        self._propertiesjson["title"] = value
         self._mark_dirty('properties.title')
         
     @property
+    def initial_row_count(self) -> int:
+        return self._initial_row_count
+    
+    @property
+    def initial_column_count(self) -> int:
+        return self._initial_column_count
+        
+    @property
     def row_count(self) -> int:
-        return self._jsonsheet["properties"]["gridProperties"]["rowCount"]
+        return self._propertiesjson["gridProperties"]["rowCount"]
     
     @row_count.setter
     def row_count(self, value: int) -> None:
         self.raise_for_stale()
         if not isinstance(value, int):
             raise TypeError("row_count must be an integer")
-        self._jsonsheet["properties"]["gridProperties"]["rowCount"] = value
+        if self._from_duplicate and value < self.row_count:
+            raise ValueError("cannot downscale duplicated sheet. Sync with Cloud first.")
+        self._propertiesjson["gridProperties"]["rowCount"] = value
         self._mark_dirty("properties.gridProperties.rowCount")
         self._resize_fetched_range()
     
     @property
     def column_count(self) -> int:
-        return self._jsonsheet["properties"]["gridProperties"]["columnCount"]
+        return self._propertiesjson["gridProperties"]["columnCount"]
     
     @column_count.setter
     def column_count(self, value: int) -> None:
         self.raise_for_stale()
         if not isinstance(value, int):
             raise TypeError("column_count must be an integer")
-        self._jsonsheet["properties"]["gridProperties"]["columnCount"] = value
+        if self._from_duplicate and value < self.column_count:
+            raise ValueError("cannot downscale duplicated sheet. Sync with Cloud first.")
+        self._propertiesjson["gridProperties"]["columnCount"] = value
         self._mark_dirty("properties.gridProperties.columnCount")
         self._resize_fetched_range()
         
@@ -737,26 +797,26 @@ class Sheet(TrackedModel):
     
     @property
     def frozen_row_count(self) -> int:
-        return self._jsonsheet["properties"]["gridProperties"].get('frozenRowCount', 0)
+        return self._propertiesjson["gridProperties"].get('frozenRowCount', 0)
     
     @frozen_row_count.setter
     def frozen_row_count(self, value: int) -> None:
         self.raise_for_stale()
         if not isinstance(value, int):
             raise TypeError("frozen_row_count must be an integer")
-        self._jsonsheet["properties"]["gridProperties"]["frozenRowCount"] = value
+        self._propertiesjson["gridProperties"]["frozenRowCount"] = value
         self._mark_dirty("properties.gridProperties.frozenRowCount")
         
     @property
     def frozen_column_count(self) -> int:
-        return self._jsonsheet["properties"]["gridProperties"].get('frozenColumnCount', 0)
+        return self._propertiesjson["gridProperties"].get('frozenColumnCount', 0)
 
     @frozen_column_count.setter
     def frozen_column_count(self, value: int) -> None:
         self.raise_for_stale()
         if not isinstance(value, int):
             raise TypeError("frozen_column_count must be an integer")
-        self._jsonsheet["properties"]["gridProperties"]["frozenColumnCount"] = value
+        self._propertiesjson["gridProperties"]["frozenColumnCount"] = value
         self._mark_dirty("properties.gridProperties.frozenColumnCount")
     
     def apply_data_validation(self, validation: DataValidation):
@@ -797,6 +857,7 @@ class Spreadsheet:
     _sheets: list[Sheet]
     _original_sheet_order: list[int]
     _duplicate_sheet_requests: list[dict[str, Any]]
+    _removing_sheet_ids: set[int]
     
     _protected_ranges: dict[int, set[ProtectedRange]]
     _removing_protected_range_ids: dict[int, set[int]]
@@ -829,6 +890,7 @@ class Spreadsheet:
                 if sheet_developer_metadata_json else SheetDeveloperMetadata(sheet_id))
 
         self._original_sheet_order: list[int] = [s.id for s in self._sheets]
+        self._duplicate_sheet_requests: list[dict[str, Any]] = []
         
     # =========================================================================================================
     
@@ -838,7 +900,7 @@ class Spreadsheet:
     
     @property
     def title(self) -> str:
-        return self._propertiesjson["properties"]["title"]
+        return self._propertiesjson["title"]
     
     @property
     def url(self) -> str:
@@ -862,11 +924,49 @@ class Spreadsheet:
             raise ValueError("sheet_ids must contain exactly the same ids as the current sheets")
         self._sheets = [self.get_sheet_by_id(sid) for sid in sheet_ids]
         
-    def duplicate_sheet(self, sheet_id: int, new_sheet_id: int | None, new_sheet_title: str | None):
-        self.get_sheet_by_id(sheet_id).stale = True
-        # TODO choose a new_sheet_id if None
-        # TODO create a duplicate method in Sheet that duplicates the json as well as values if any are loaded
-        raise NotImplementedError()
+    def duplicate_sheet(self, 
+                        source_sheet_id: int, 
+                        new_sheet_id: int | None, 
+                        new_sheet_title: str | None,
+                        copy_protected_ranges: bool = True,
+                        copy_developer_metadata: bool = True) -> Sheet:
+        """ Duplicates a sheet within the spreadsheet. The source_sheet will be stale afterwards.
+
+        Args:
+            source_sheet_id (int): id of the source sheet
+            new_sheet_id (int | None): id of the new sheet, optional
+            new_sheet_title (str | None): title of the new sheet, defaults to "Copy of source.title
+            copy_protected_ranges (bool, optional): if true, includes protected ranges. Defaults to True.
+            copy_developer_metadata (bool, optional): if true, includes developerMetadata. Defaults to True.
+
+        Returns:
+            Sheet: the new sheet, added to the spreadsheet (but not yet synced)
+        """
+        source_sheet = self.get_sheet_by_id(source_sheet_id)
+        if new_sheet_id is None:
+            # choose a random sheet_id
+            excluded = {sheet.id for sheet in self.sheets}
+            new_sheet_id = random.choice(list(set(range(10_000)) - excluded))
+        if new_sheet_title is None:
+            new_sheet_title = f"Copy of {source_sheet.title}"
+        new_sheet = source_sheet._duplicate(new_sheet_id=new_sheet_id, new_sheet_title=new_sheet_title)
+        self._sheets.append(new_sheet)
+        self._duplicate_sheet_requests.append({
+            "sourceSheetId": source_sheet_id,
+            "insertSheetIndex": 0,  # sheets get resorted anyway
+            "newSheetId": new_sheet_id,
+            "newSheetName": new_sheet_title
+        })
+        if copy_protected_ranges:
+            protected_ranges = {pr._copy_to(source_sheet_id) for pr in self._protected_ranges[source_sheet_id]}
+            self._protected_ranges[new_sheet_id] = protected_ranges
+        else:
+            self._protected_ranges[new_sheet_id] = set()
+        if copy_developer_metadata:
+            self._developerMetadata[new_sheet_id] = self._developerMetadata[source_sheet_id]._copy_to(sheet_id=new_sheet_id)
+        else:
+            self._developerMetadata[new_sheet_id] = SheetDeveloperMetadata(sheet_id=new_sheet_id)
+        return new_sheet
         
     def remove_sheet(self, sheet_id: int):
         sheet = self.get_sheet_by_id(sheet_id)
@@ -874,7 +974,7 @@ class Spreadsheet:
         self._original_sheet_order.remove(sheet_id)
         self._sheets.remove(sheet)
         del self._protected_ranges[sheet_id]
-        # TODO queue delete request?
+        self._removing_sheet_ids.add(sheet_id)
         
     # =========================================================================================================
         
@@ -910,25 +1010,158 @@ class Spreadsheet:
         self.__init__(self._gspreadsheets_client, self.id)
     
     def push(self):
-        batch_updates: dict[int, list[dict[str, Any]]] = {}
+        # update values for smaller sheets bc we need to clear those ranges first
+        already_existing_downscaled_sheets = {sheet for sheet in self._sheets if (
+            sheet.id in set(self._original_sheet_order) and
+            sheet.row_count < sheet.initial_row_count or sheet.column_count < sheet.initial_column_count
+        )}
+        batch_values_update: dict[Sheet, list[ValueRange]] = {}
+        for sheet in already_existing_downscaled_sheets:
+            if sheet.is_value_dirty:
+                assert sheet.fetched_values is not None
+                batch_values_update[sheet] = sheet.fetched_values.dirty_cells()
+        self._batch_values_update(list(chain.from_iterable(batch_values_update.values())))
+        for sheet in batch_values_update:
+            sheet.mark_value_clean()
         
+        # update sheet properties of already existing sheets
+        batch_updates: dict[Sheet, list[dict[str, Any]]] = {}
         for sheet in self._sheets:
-            sheet_batch_updates: list[dict[str, Any]] = []
-            if sheet.is_dirty:
-                # TODO wo soll die Verantwortlichkeit für die requests sein? Bei den Objekten selbst oder hier?
-                pass
-                
+            if not sheet.is_dirty:
+                continue
+            if sheet.id not in set(self._original_sheet_order):
+                # not yet existing
+                continue
+            batch_updates.setdefault(sheet, []).append({
+                "updateSheetProperties": {
+                    "properties": sheet.properties_json,
+                    "fields": sheet.dirty_field_mask
+                }
+            })
+        self._batch_update(list(chain.from_iterable(batch_updates.values())))
+        for sheet in batch_updates:
+            sheet.mark_clean()
         
+        # value updates of already existing sheets
+        batch_values_update.clear()
+        for sheet in self._sheets:
+             if not sheet.is_value_dirty:
+                 continue
+             if sheet.id not in self._original_sheet_order:
+                 continue
+             assert sheet.fetched_values is not None
+             batch_values_update[sheet] = sheet.fetched_values.dirty_cells()
+        self._batch_values_update(list(chain.from_iterable(batch_values_update.values())))
+        for sheet in batch_values_update:
+            sheet.mark_value_clean()
+            
+        # TODO copy & paste requests
         
-        # update sheet properties if dirty
+        # sheet duplication requests
+        batch_updates.clear()
+        source_sheets: list[Sheet] = []
+        for duplicate_sheet_request in self._duplicate_sheet_requests:
+            source_sheets.append(self.get_sheet_by_id(duplicate_sheet_request['sourceSheetId']))
+            new_sheet = self.get_sheet_by_id(duplicate_sheet_request['newSheetId'])
+            batch_updates.setdefault(new_sheet, []).append({
+                "duplicateSheetRequest": duplicate_sheet_request
+            })
+            
+            # check for properties updates after duplication
+            if new_sheet.is_dirty:
+                batch_updates[new_sheet].append({
+                "updateSheetProperties": {
+                    "properties": new_sheet.properties_json,
+                    "fields": new_sheet.dirty_field_mask
+                }
+            })
+        self._batch_update(list(chain.from_iterable(batch_updates.values())))
+        for sheet in source_sheets:
+            sheet.stale = False
+        for sheet in batch_updates:
+            sheet.mark_clean()
+            
+        # value update for duplicated sheet
+        batch_values_update.clear()
+        for sheet in batch_updates:
+            if not sheet.is_value_dirty:
+                continue
+            assert sheet.fetched_values is not None
+            batch_values_update[sheet] = sheet.fetched_values.dirty_cells()
+        self._batch_values_update(list(chain.from_iterable(batch_values_update.values())))
+        for sheet in batch_values_update:
+            sheet.mark_value_clean()
+            
         # update protected ranges
-        # update developerMetadata
-        # make duplicate sheet stuff
-        # make copy & paste stuff
-        # mark everything as clean
-        
-        # possibly do for each sheet individually. 
-        # The sheets should provide the batch requests and spreadsheet should execute them
+        batch_meta_updates: dict[int, list[dict[str, Any]]] = {}
+        for sheet_id, protected_ranges in self._protected_ranges.items():
+            for pr in protected_ranges:
+                if not pr.is_dirty:
+                    continue
+                if pr.id is None:
+                    # new protected range
+                    batch_meta_updates.setdefault(sheet_id, []).append({
+                        "addProtectedRange": {
+                            "protectedRange": pr.request_json
+                        }
+                    })
+                else:
+                    batch_meta_updates.setdefault(sheet_id, []).append({
+                        "updateProtectedRange": {
+                            "protectedRange": pr.request_json,
+                            "fields": pr.dirty_field_mask
+                        }
+                    })
+
+        # update developerMetadata            
+        for sheet_id, developerMetadata in self._developerMetadata.items():
+            if not developerMetadata.is_dirty:
+                continue
+            if developerMetadata.id is not None:
+                data_filter = {
+                    "developerMetadataLookup": {
+                        "metadataId": developerMetadata.id
+                    }
+                }
+                
+                if len(developerMetadata) == 0:
+                    # metadata empty, remove
+                    batch_meta_updates.setdefault(sheet_id, []).append({
+                        "deleteDeveloperMetadata": {
+                            "dataFilter": data_filter
+                        }
+                    })
+                else:
+                    # metadata has values, update
+                    batch_meta_updates.setdefault(sheet_id, []).append({
+                        "updateDeveloperMetadata": {
+                            "dataFilters": [data_filter],
+                            "developerMetadata": developerMetadata.request_json,
+                            "fields": developerMetadata.dirty_field_mask
+                        }
+                    })
+                continue
+            # developerMetadata does not exist, create if not empty
+            if len(developerMetadata) != 0:
+                batch_meta_updates.setdefault(sheet_id, []).append({
+                    "createDeveloperMetadata": {
+                        "developerMetadata": developerMetadata.request_json
+                    }
+                })
+        batch_requests = list(chain.from_iterable(batch_meta_updates.values()))
+        remove_requests = [{"sheetId": sheet_id} for sheet_id in self._removing_sheet_ids]
+        batch_requests.extend(remove_requests)
+        # check if we need to resort sheets
+        current_order = [s.id for s in self._sheets]
+        if current_order != self._original_sheet_order:
+            for index, sheet in enumerate(self._sheets):
+                batch_requests.append({"updateSheetProperties": {"properties": {"sheetId": sheet.id, "index": index}, "fields": "index"}})
+        self._batch_update(batch_requests)
+        {pr.mark_clean() for pr_list in self._protected_ranges.values() for pr in pr_list if pr.is_dirty}
+        {dm.mark_clean() for dm in self._developerMetadata.values() if dm.is_dirty}
+        self._duplicate_sheet_requests.clear()
+        self._removing_sheet_ids.clear()
+        self._original_sheet_order = current_order
     
     def _batch_update(self, requests: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not requests:
@@ -941,8 +1174,12 @@ class Spreadsheet:
         )
         return response
         
-    def _batch_values_update(self, requests: list[dict[str, Any]]):
-        raise NotImplementedError()
-    
-    # TODO was noch zu tun ist: copy&paste und duplicate requests. Objekte updaten vs überschreiben
+    def _batch_values_update(self, value_ranges: list[ValueRange], value_input_option: str = "USER_ENTERED"):
+        body = {
+            "valueInputOption": value_input_option,
+            "data": [vr.to_json() for vr in value_ranges],
+            "includeValuesInResponse": False
+        }
+        response = self._gspreadsheets_client.values().batchUpdate(body)
+        return response
     
