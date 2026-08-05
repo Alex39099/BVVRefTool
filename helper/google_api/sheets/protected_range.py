@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from helper.google_api._tracked_model import TrackedModel
-from helper.google_api.grid_range import GridRange
+from helper.google_api.sheets._tracked_model import TrackedModel
+from helper.google_api.sheets.grid_range import GridRange
 
 
 class ProtectedRange(TrackedModel):

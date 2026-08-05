@@ -3,13 +3,13 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from helper.google_api._tracked_model import TrackedModel
-from helper.google_api.data_validation import DataValidation
-from helper.google_api.developer_metadata import SheetDeveloperMetadata
-from helper.google_api.grid_range import GridRange
-from helper.google_api.protected_range import ProtectedRange
-from helper.google_api.spreadsheet import Spreadsheet
-from helper.google_api.value_range import CellValue, FetchedRange, ValueRange
+from helper.google_api.sheets._tracked_model import TrackedModel
+from helper.google_api.sheets.data_validation import DataValidation
+from helper.google_api.sheets.developer_metadata import SheetDeveloperMetadata
+from helper.google_api.sheets.grid_range import GridRange
+from helper.google_api.sheets.protected_range import ProtectedRange
+from helper.google_api.sheets.spreadsheet import Spreadsheet
+from helper.google_api.sheets.value_range import CellValue, FetchedRange, ValueRange
 
 
 class Sheet(TrackedModel):

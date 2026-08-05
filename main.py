@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from functools import cache
 
 from config.app_config import AppConfig, GoogleSettings
-from helper import google_service
+from helper.google_api import google_service
 from helper.mailing_helper import MailConstructor, Mailer
 from manager.bvv_tools import BVVClient, normalize_course, parse_courses_from_html
 from manager.diff_layer import ChangeEventType, DiffLayer

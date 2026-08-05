@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from helper.google_api.grid_range import GridRange
+from helper.google_api.sheets.grid_range import GridRange
 
 
 @dataclass(frozen=True)

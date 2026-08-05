@@ -8,11 +8,11 @@ from typing import Any
 from google.auth.credentials import Credentials as BaseCredentials
 from googleapiclient.discovery import build
 
-from helper.google_api.developer_metadata import SheetDeveloperMetadata
-from helper.google_api.grid_range import GridRange
-from helper.google_api.protected_range import ProtectedRange
-from helper.google_api.sheet import Sheet
-from helper.google_api.value_range import ValueRange
+from helper.google_api.sheets.developer_metadata import SheetDeveloperMetadata
+from helper.google_api.sheets.grid_range import GridRange
+from helper.google_api.sheets.protected_range import ProtectedRange
+from helper.google_api.sheets.sheet import Sheet
+from helper.google_api.sheets.value_range import ValueRange
 
 
 class Spreadsheet:

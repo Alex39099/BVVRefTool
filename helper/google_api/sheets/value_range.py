@@ -5,8 +5,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
-from helper.google_api.grid_range import GridRange
-from helper.google_api.sheet import Sheet
+from helper.google_api.sheets.grid_range import GridRange
+from helper.google_api.sheets.sheet import Sheet
 
 CellValue = str | int | float | bool | None
 
