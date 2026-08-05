@@ -83,6 +83,17 @@ class SheetDeveloperMetadata(MutableMapping):
         if not isinstance(value, int):
             raise TypeError("value must be of type int")
         self._metadata_id = value
+        
+    @property
+    def data(self) -> dict[str, JsonValue]:
+        return json.loads(json.dumps(self._data))
+    
+    @data.setter
+    def data(self, value: dict[str, JsonValue]) -> None:
+        try:
+            self._data = json.loads(json.dumps(value))
+        except (TypeError, ValueError) as e:
+            raise TypeError(f"Value {value!r} is not JSON-serialisable") from e
     
     def __getitem__(self, key) -> JsonValue:
         return self._data.__getitem__(key)
