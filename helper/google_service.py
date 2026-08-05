@@ -1,7 +1,6 @@
 import logging
 import os
 from pathlib import Path
-from typing import Any
 
 from google.auth.credentials import Credentials as BaseCredentials
 from google.auth.transport.requests import Request
@@ -132,62 +131,3 @@ def read_spreadsheet_data(spreadsheet_id: str, range_name: str, credentials: Bas
     except Exception:
         logger.exception(f"Unexpected error while reading from spreadsheet '{spreadsheet_id}', range '{range_name}'")
         raise
-    
-def write_spreadsheet_data(spreadsheet_id: str, range_name: str, data: list[list[Any]], credentials: BaseCredentials) -> dict:
-    """Write data to a Google Sheets spreadsheet using the Sheets API v4.
-
-    Args:
-        spreadsheet_id (str): id of the spreadsheet to read
-        range_name (str): range within the spreadsheet to read
-        data (list[list[Any]]): data to write to the spreadsheet
-        credentials (BaseCredentials): credentials to use for authorization
-
-    Raises:
-        HttpError: if the request to the Google Sheets API fails
-        ValueError: if spreadsheet_id or range_name are empty
-        Exception: re-raises for any other unexpected errors
-
-    Returns:
-        dict: response from the Google Sheets API after writing the data
-    """
-    if not spreadsheet_id:
-        raise ValueError("spreadsheet_id must be a non-empty string.")
-    if not range_name:
-        raise ValueError("range_name must be a non-empty string.")
-    if data is None:
-        raise ValueError("data must not be None.")
-    
-    try:
-        service = build("sheets", "v4", credentials=credentials)
-
-        body: dict[str, Any] = {
-            "range": range_name,
-            "majorDimension": "ROWS",
-            "values": data,
-        }
-
-        response: dict = (
-            service.spreadsheets()
-            .values()
-            .update(
-                spreadsheetId=spreadsheet_id,
-                range=range_name,
-                valueInputOption="RAW",
-                body=body,
-            )
-            .execute()
-        )
-
-    except HttpError as e:
-        logger.error(f"Sheets API HTTP error while writing to spreadsheet '{spreadsheet_id}', range '{range_name}': {e}")
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error while writing to spreadsheet '{spreadsheet_id}', range '{range_name}': {e}")
-        raise
-    
-    logger.info(
-        f"Successfully wrote to spreadsheet '{spreadsheet_id}', range '{range_name}'. "
-        f"Updated range: '{response.get('updatedRange')}', cells updated: {response.get('updatedCells')}."
-    )
-
-    return response
