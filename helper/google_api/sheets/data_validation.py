@@ -31,7 +31,7 @@ class DropDownValidationRule:
             "condition": {
                 "type": "ONE_OF_RANGE",
                 "values": [{
-                    "userEnteredValue": a1_notation_range
+                    "userEnteredValue": f"={a1_notation_range}"
                 }]
             },
             "inputMessage": self.input_message,
