@@ -3,10 +3,12 @@ from __future__ import annotations
 import copy
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from helper.google_api.sheets.grid_range import GridRange
-from helper.google_api.sheets.sheet import Sheet
+
+if TYPE_CHECKING:
+    from helper.google_api.sheets.sheet import Sheet
 
 CellValue = str | int | float | bool | None
 

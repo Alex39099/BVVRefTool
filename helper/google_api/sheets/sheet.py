@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from helper.google_api.sheets._tracked_model import TrackedModel
-from helper.google_api.sheets.data_validation import DataValidation
-from helper.google_api.sheets.developer_metadata import SheetDeveloperMetadata
 from helper.google_api.sheets.grid_range import GridRange
-from helper.google_api.sheets.protected_range import ProtectedRange
-from helper.google_api.sheets.spreadsheet import Spreadsheet
-from helper.google_api.sheets.value_range import CellValue, FetchedRange, ValueRange
+from helper.google_api.sheets.value_range import FetchedRange, ValueRange
+
+if TYPE_CHECKING:
+    from helper.google_api.sheets.data_validation import DataValidation
+    from helper.google_api.sheets.developer_metadata import SheetDeveloperMetadata
+    from helper.google_api.sheets.protected_range import ProtectedRange
+    from helper.google_api.sheets.spreadsheet import Spreadsheet
+    from helper.google_api.sheets.value_range import CellValue
 
 
 class Sheet(TrackedModel):
