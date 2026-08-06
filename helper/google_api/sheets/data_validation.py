@@ -46,6 +46,10 @@ class DataValidation:
     range: GridRange
     rule: DropDownValidationRule | None
     
+    def __post_init__(self):
+        if self.rule is not None and self.rule.range.overlaps(self.range):
+            raise ValueError("validation range and rule range must not overlap")
+    
     def to_json(self):
         return {
             "range": self.range.to_json(),
