@@ -11,8 +11,8 @@ from helper.google_api.sheets.sheet import Sheet
 class DropDownValidationRule:
     sheet: Sheet
     range: GridRange
-    input_message: str
-    strict: bool
+    input_message: str = ""
+    strict: bool = True
     
     def __post_init__(self):
         if self.sheet.id != self.range.sheet_id:
@@ -53,8 +53,15 @@ class DataValidation:
             raise ValueError("range does not belong to given sheet")
     
     def to_json(self):
+        bound_range = GridRange(
+            sheet_id=self.sheet.id,
+            start_row_idx=self.range.start_row_idx or 0,
+            end_row_idx=min(self.sheet.row_count - 1, self.range.end_row_idx or self.sheet.row_count - 1),
+            start_column_idx=self.range.start_column_idx or 0,
+            end_column_idx=min(self.sheet.column_count - 1, self.range.end_column_idx or self.sheet.column_count - 1)
+        )
         return {
-            "range": self.range.to_json(),
+            "range": bound_range.to_json(),
             "rule": self.rule.to_json() if self.rule is not None else {},
             "filteredRowsIncluded": True
         }

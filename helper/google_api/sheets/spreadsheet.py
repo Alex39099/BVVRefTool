@@ -51,6 +51,7 @@ class Spreadsheet:
         
         self._sheets: list[Sheet] = []
         self._removing_sheet_ids: set[int] = set()
+        self._data_validations: dict[int, list[DataValidation]] = {}
         self._protected_ranges: dict[int, set[ProtectedRange]] = {}
         self._removing_protected_range_ids: dict[int, set[int]] = {}
         self._developerMetadata: dict[int, SheetDeveloperMetadata] = {}
@@ -172,6 +173,8 @@ class Spreadsheet:
             "newSheetId": new_sheet_id,
             "newSheetName": new_sheet_title
         })
+        self._data_validations[new_sheet_id] = []
+        self._removing_protected_range_ids[new_sheet_id] = set()
         if copy_protected_ranges:
             protected_ranges = {pr._copy_to(new_sheet_id) for pr in self._protected_ranges[source_sheet_id]}
             self._protected_ranges[new_sheet_id] = protected_ranges
