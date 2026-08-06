@@ -91,7 +91,7 @@ class GridRange:
             end_column_idx=end_col,
         )
         
-    def to_a1_notation(self, sheet_title: str | None = None) -> str:
+    def to_a1_notation(self, sheet_title: str | None = None, fixed: bool = False) -> str:
         """ Constructs the A1 notation of this GridRange
 
         Args:
@@ -108,10 +108,11 @@ class GridRange:
                 if idx < 0:
                     break
             return result
-        start_col = _idx_to_col(self.start_column_idx) if self.start_column_idx is not None else ""
-        end_col = _idx_to_col(self.end_column_idx) if self.end_column_idx is not None else ""
-        start_row = str(self.start_row_idx + 1) if self.start_row_idx is not None else ""
-        end_row = str(self.end_row_idx + 1) if self.end_row_idx is not None else ""
+        fix = "$" if fixed else ""
+        start_col = f"{fix}{_idx_to_col(self.start_column_idx)}" if self.start_column_idx is not None else ""
+        end_col = f"{fix}{_idx_to_col(self.end_column_idx)}" if self.end_column_idx is not None else ""
+        start_row = f"{fix}{self.start_row_idx + 1}" if self.start_row_idx is not None else ""
+        end_row = f"{fix}{self.end_row_idx + 1}" if self.end_row_idx is not None else ""
 
         range_str = f"{start_col}{start_row}:{end_col}{end_row}"
         return f"'{sheet_title}'!{range_str}" if sheet_title else range_str
@@ -234,5 +235,4 @@ class GridRange:
             overlaps_1d(self.start_row_idx, self.end_row_idx, other.start_row_idx, other.end_row_idx) and
             overlaps_1d(self.start_column_idx, self.end_column_idx, other.start_column_idx, other.end_column_idx)
         )
-
  

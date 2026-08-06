@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from google.auth.credentials import Credentials as BaseCredentials
 from googleapiclient.discovery import build
 
+from helper.google_api.sheets.data_validation import DataValidation
 from helper.google_api.sheets.developer_metadata import SheetDeveloperMetadata
 from helper.google_api.sheets.protected_range import ProtectedRange
 from helper.google_api.sheets.sheet import Sheet
@@ -27,6 +28,8 @@ class Spreadsheet:
     _original_sheet_order: list[int]
     _duplicate_sheet_requests: list[dict[str, Any]]
     _removing_sheet_ids: set[int]
+    
+    _data_validations: dict[int, list[DataValidation]]
     
     _protected_ranges: dict[int, set[ProtectedRange]]
     _removing_protected_range_ids: dict[int, set[int]]
@@ -55,6 +58,7 @@ class Spreadsheet:
             sheet = Sheet(spreadsheet=self, propertiesjson=sheet_json['properties'])
             self._sheets.append(sheet)
             sheet_id = sheet.id
+            self._data_validations[sheet_id] = []
             self._protected_ranges[sheet_id] = {ProtectedRange.from_json(d) for d in sheet_json.get('protectedRanges', [])}
             self._removing_protected_range_ids[sheet_id] = set()
             sheet_developer_metadata_json = sheet_json.get('developerMetadata', [{}])[0]
@@ -169,7 +173,7 @@ class Spreadsheet:
             "newSheetName": new_sheet_title
         })
         if copy_protected_ranges:
-            protected_ranges = {pr._copy_to(source_sheet_id) for pr in self._protected_ranges[source_sheet_id]}
+            protected_ranges = {pr._copy_to(new_sheet_id) for pr in self._protected_ranges[source_sheet_id]}
             self._protected_ranges[new_sheet_id] = protected_ranges
         else:
             self._protected_ranges[new_sheet_id] = set()
@@ -192,6 +196,15 @@ class Spreadsheet:
         del self._protected_ranges[sheet_id]
         self._removing_sheet_ids.add(sheet_id)
         
+    # =========================================================================================================
+    
+    def apply_data_validation(self, validation: DataValidation):
+        if validation.sheet not in self.sheets:
+            raise ValueError("validation range is not part of this spreadsheet")
+        if validation.rule is not None and validation.rule.sheet not in self.sheets:
+            raise ValueError("validation rule is outside this spreadsheet")
+        self._data_validations[validation.sheet.id].append(validation)
+    
     # =========================================================================================================
         
     @property
@@ -347,7 +360,7 @@ class Spreadsheet:
             source_sheets.append(self.get_sheet_by_id(duplicate_sheet_request['sourceSheetId']))
             new_sheet = self.get_sheet_by_id(duplicate_sheet_request['newSheetId'])
             batch_updates.setdefault(new_sheet, []).append({
-                "duplicateSheetRequest": duplicate_sheet_request
+                "duplicateSheet": duplicate_sheet_request
             })
             
             # check for properties updates after duplication
@@ -374,9 +387,16 @@ class Spreadsheet:
         self._batch_values_update(list(chain.from_iterable(batch_values_update.values())))
         for sheet in batch_values_update:
             sheet.mark_value_clean()
+        
+        batch_meta_updates: dict[int, list[dict[str, Any]]] = {}
+        # apply data validation
+        for sheet_id, validations in self._data_validations.items():
+            for validation in validations:
+                batch_meta_updates.setdefault(sheet_id, []).append({
+                    "setDataValidation": validation.to_json()
+                })
             
         # update protected ranges
-        batch_meta_updates: dict[int, list[dict[str, Any]]] = {}
         for sheet_id, protected_ranges in self._protected_ranges.items():
             for pr in protected_ranges:
                 if not pr.is_dirty:

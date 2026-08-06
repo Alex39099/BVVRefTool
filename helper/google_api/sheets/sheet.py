@@ -29,6 +29,10 @@ class Sheet(TrackedModel):
         self._from_duplicate: bool = False
         
     def _duplicate(self, new_sheet_id: int, new_sheet_title: str) -> Sheet:
+        if not isinstance(new_sheet_id, int):
+            raise TypeError("new_sheet_id must be of type int")
+        if not isinstance(new_sheet_title, str) or not new_sheet_title:
+            raise ValueError("new_sheet_title must be a non empty str")
         self.stale = True
         new_sheet = Sheet(
             spreadsheet=self.spreadsheet,
@@ -220,7 +224,9 @@ class Sheet(TrackedModel):
         self._mark_dirty("properties.gridProperties.frozenColumnCount")
     
     def apply_data_validation(self, validation: DataValidation):
-        raise NotImplementedError()
+        if validation.sheet != self:
+            raise ValueError("dataValidation does not belong to this sheet")
+        self.spreadsheet.apply_data_validation(validation)
     
     @property
     def protected_ranges(self) -> tuple[ProtectedRange, ...]:
