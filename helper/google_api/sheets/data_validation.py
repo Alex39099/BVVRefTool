@@ -49,6 +49,8 @@ class DataValidation:
     def __post_init__(self):
         if self.rule is not None and self.rule.range.overlaps(self.range):
             raise ValueError("validation range and rule range must not overlap")
+        if self.range.sheet_id != self.sheet.id:
+            raise ValueError("range does not belong to given sheet")
     
     def to_json(self):
         return {
