@@ -179,16 +179,18 @@ class GridRange:
         """
         if self.sheet_id != other.sheet_id:
             return False
-        if (self.start_row_idx is not None and other.start_row_idx is not None and
-                other.start_row_idx < self.start_row_idx):
+        
+        if (self.start_row_idx or 0) > (other.start_row_idx or 0):
             return False
-        if (self.end_row_idx is not None and other.end_row_idx is not None and
-                other.end_row_idx > self.end_row_idx):
+        if self.end_row_idx is not None and other.end_row_idx is None:
             return False
-        if (self.start_column_idx is not None and other.start_column_idx is not None and
-                other.start_column_idx < self.start_column_idx):
+        if self.end_row_idx is not None and other.end_row_idx is not None and self.end_row_idx < other.end_row_idx:
             return False
-        return not (self.end_column_idx is not None and other.end_column_idx is not None and other.end_column_idx > self.end_column_idx)
+        if (self.start_column_idx or 0) > (other.start_column_idx or 0):
+            return False
+        if self.end_column_idx is not None and other.end_column_idx is None:
+            return False
+        return not (self.end_column_idx is not None and other.end_column_idx is not None and self.end_column_idx < other.end_column_idx)
     
     def contains_a1(self, a1_notation: str) -> bool:
         """ Check if the given a1_notation is within this gridRange
@@ -209,7 +211,7 @@ class GridRange:
             return self.contains_idx(key[0], key[1])
         if isinstance(key, str):
             return self.contains_a1(key)
-        raise TypeError("key must be of type tuple[int, int] or str")
+        raise TypeError("key must be of type tuple[int, int], str in a1 notation or GridRange")
     
     def overlaps(self, other: GridRange) -> bool:
         """ Check if the given gridRange overlaps with this gridRange
