@@ -63,11 +63,12 @@ class Sheet(TrackedModel):
             new_sheet_title=new_sheet_title
         )
         
-    def fetch_values(self, overwrite_local_changes: bool = True):
+    def fetch_values(self, overwrite_local_changes: bool = True, value_render_option: str = "FORMULA"):
         """ Fetches all values of the spreadsheet.
 
         Args:
             overwrite_local_changes (bool, optional): _description_. Defaults to True.
+            value_render_option (str): the value render option, used for the API call. Defaults to "FORMULA".
 
         Raises:
             ValueError: if there are local value changes and overwrite_local_changes is False
@@ -76,7 +77,8 @@ class Sheet(TrackedModel):
             raise ValueError("There are local value changes and overwrite_local_changes is False")
         raw = self.spreadsheet._gspreadsheets_client.values().get(
             spreadsheetId=self.spreadsheet.id,
-            range=self.grid_range.to_a1_notation(self._initial_title)
+            range=self.grid_range.to_a1_notation(self._initial_title),
+            valueRenderOption=value_render_option
         ).execute()
         value_range = ValueRange.from_json(raw)
         self.fetched_values = FetchedRange.from_value_range(sheet=self, value_range=value_range)
