@@ -35,6 +35,8 @@ class DropDownListValidationRule(ValidationRule):
         for v in self.values:
             if not isinstance(v, str):
                 raise TypeError(f"values must be a tuple of strings, got {self.values}")
+            if v.startswith("="):
+                raise ValueError("formulas are not supported for list validation")
     
     @property
     def condition_json(self) -> dict[str, Any]:
