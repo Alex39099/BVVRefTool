@@ -204,8 +204,6 @@ class Spreadsheet:
     def apply_data_validation(self, validation: DataValidation):
         if validation.sheet not in self.sheets:
             raise ValueError("validation range is not part of this spreadsheet")
-        if validation.rule is not None and validation.rule.sheet not in self.sheets:
-            raise ValueError("validation rule is outside this spreadsheet")
         self._data_validations[validation.sheet.id].append(validation)
     
     # =========================================================================================================
