@@ -28,6 +28,19 @@
             "oauth_token_file_path": "gc_token.json"
         }
     },
+    "registration_srv": {
+        "spreadsheet_id": "CHANGE_TO_YOUR_SETTINGS",
+        "datetime_format": "%d.%m.%Y",
+        "managed_course_template": {
+            "details": "=HYPERLINK(\"https://volleyball.bayern/schiri/lehrgaenge/lehrgang/lehrgang-{course_id}\", \"siehe Volleyball Bayern\")",
+            "how_to": "=HYPERLINK(\"https://sites.google.com/tsvhaunstetten.de/trainerhandbuch/mannschaft#h.h95evsjeullv\", \"siehe Trainerhandbuch\")"
+        },
+        "open_course_template": {
+            "sheet_name": "Open Course Template",
+            "details": "=HYPERLINK(\"https://bvv.volley.de/portal/core_anl.action?anleitungid=34\", \"Anleitung zur Teilnahme an Fortbildungen Online\")",
+            "how_to": "=HYPERLINK(\"https://sites.google.com/tsvhaunstetten.de/trainerhandbuch/mannschaft#h.h95evsjeullv\", \"siehe Trainerhandbuch\")"
+        }
+    },
     "subscription_srv": {
         "from_name": "CHANGE_TO_YOUR_SETTINGS",
         "from_mail": "CHANGE_TO_YOUR_SETTINGS",

@@ -679,9 +679,11 @@ class BVVClient:
         Returns:
             str: the generated user token.
         """
-        for name, value in (("last_name", last_name), ("first_name", first_name), ("user_id", user_id)):
-            if not value or not value.strip():
+        for name, value in (("last_name", last_name.strip()), ("first_name", first_name.strip()), ("user_id", user_id.strip())):
+            if not isinstance(value, str) or not value:
                 raise ValueError(f"{name} must be a non-empty string")
+        if not isinstance(birth_date, date):
+            raise TypeError("birth_date must be of type date")
         return f"{last_name}, {first_name} ({birth_date.strftime('%d.%m.%Y')}) [{user_id}]"
 
 
@@ -1174,3 +1176,17 @@ def parse_date_period(period: str | None) -> tuple[date | None, date | None]:
     date2 = datetime.strptime('.'.join(components2).strip(), '%d.%m.%Y').date()
 
     return date1, date2
+
+def normalize_user_token(token: str) -> PersonIdentity:
+    match = re.fullmatch(
+            r"(?P<last_name>.+),\s(?P<first_name>.+)\s$(?P<birth_date>\d{2}\.\d{2}\.\d{4})$\s$$(?P<user_id>.+)$$",
+            token.strip()
+        )
+    if match is None:
+        raise ValueError(f"invalid user token format: '{token}'")
+    return PersonIdentity(
+        last_name=match.group("last_name"),
+        first_name=match.group("first_name"),
+        birth_date=datetime.strptime(match.group("birth_date"), "%d.%m.%Y").date(),
+        id=match.group("user_id")
+    )
