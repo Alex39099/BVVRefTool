@@ -5,7 +5,11 @@ from typing import TYPE_CHECKING, Any
 
 from helper.google_api.sheets._tracked_model import TrackedModel
 from helper.google_api.sheets.grid_range import GridRange
-from helper.google_api.sheets.value_range import FetchedRange, ValueRange, ValueRenderOption
+from helper.google_api.sheets.value_range import (
+    FetchedRange,
+    ValueRange,
+    ValueRenderOption,
+)
 
 if TYPE_CHECKING:
     from helper.google_api.sheets.data_validation import DataValidation
@@ -266,18 +270,22 @@ class Sheet(TrackedModel):
     def developer_metadata(self) -> SheetDeveloperMetadata:
         return self.spreadsheet._developerMetadata[self.id]
     
-    def copy_paste(self, source: GridRange, destinations: list[GridRange], value_render_option: ValueRenderOption = ValueRenderOption.FORMULA):
+    def copy_paste(self, source: GridRange, destinations: list[GridRange], value_render_option: ValueRenderOption | None = ValueRenderOption.FORMULA, skip_fetch: bool = False):
         """ Immediately copy&pastes a source range to (multiple) destinations. Fetches values afterwards.
 
         Args:
             source (GridRange): source to copy from.
             destinations (list[GridRange]): list of destinations to copy source to (must not overlap with source).
             value_render_option (ValueRenderOption): value render option for the subsequent fetch. Defaults to ValueRenderOption.FORMULA.
+            skip_fetch (bool): If true, skips the subsequent fetch and instead resets fetched_values of this sheet. Defaults to False.
 
         Raises:
             ValueError: sheet is stale or was recently duplicated, fetched values are dirty, gridRanges outside the sheet or if source and destinations overlap.
         """
         self.raise_for_stale()
+        if not skip_fetch and not isinstance(value_render_option, ValueRenderOption):
+            raise ValueError("value_render_option must be specified for skip_fetch == False")
+        
         if self._from_duplicate:
             raise ValueError("sheet is not yet synced with cloud")
         if self.is_value_dirty:
@@ -287,4 +295,6 @@ class Sheet(TrackedModel):
         if any(source.overlaps(destination) for destination in destinations):
             raise ValueError("destinations must not overlap with source")
         self.spreadsheet._copy_paste(source, destinations)
-        self.fetch_values(value_render_option=value_render_option)
+        if not skip_fetch:
+            assert isinstance(value_render_option, ValueRenderOption)
+            self.fetch_values(value_render_option=value_render_option)
