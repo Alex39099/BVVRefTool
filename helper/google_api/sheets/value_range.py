@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 from collections.abc import Iterator
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from helper.google_api.sheets.grid_range import GridRange
@@ -12,16 +13,25 @@ if TYPE_CHECKING:
 
 CellValue = str | int | float | bool | None
 
+
+class ValueRenderOption(StrEnum):
+    # See also https://developers.google.com/workspace/sheets/api/reference/rest/v4/ValueRenderOption
+    FORMATTED_VALUE = "FORMATTED_VALUE"
+    UNFORMATTED_VALUE = "UNFORMATTED_VALUE"
+    FORMULA = "FORMULA"
+
 @dataclass(frozen=True)
 class ValueRange:
     range_name: str  # a1 notation
     values: list[list[CellValue]]
+    value_render_option: ValueRenderOption
 
     @classmethod
-    def from_json(cls, data: dict[str, Any]) -> ValueRange:
+    def from_json(cls, data: dict[str, Any], value_render_option: ValueRenderOption) -> ValueRange:
         return cls(
             range_name=data["range"],
-            values=data.get("values", [])
+            values=data.get("values", []),
+            value_render_option=value_render_option
         )
 
     def to_json(self) -> dict[str, Any]:
@@ -36,14 +46,16 @@ class FetchedRange:
     _grid_range: GridRange  # guards set_value
     _snapshot: list[list[CellValue]] # immutable — fetched from cloud
     current: list[list[CellValue]] # mutable — local changes
+    _value_render_option: ValueRenderOption
     
-    def __init__(self, sheet: Sheet, grid_range: GridRange, fetched_values: list[list[CellValue]]) -> None:
+    def __init__(self, sheet: Sheet, grid_range: GridRange, fetched_values: list[list[CellValue]], value_render_option: ValueRenderOption) -> None:
         """ Constructs a FetchedRange.
 
         Args:
             sheet (Sheet): the sheet this FetchedRange belongs to
             grid_range (GridRange): a fully bound GridRange of the given sheet
             fetched_values (list[list[CellValue]]): the fetched values
+            value_render_option (ValueRenderOption): value render option used for the fetch.
 
         Raises:
             ValueError: if the gridRange is not bound in every direction
@@ -73,6 +85,10 @@ class FetchedRange:
     @property
     def snapshot(self) -> list[list[CellValue]]:
         return copy.deepcopy(self._snapshot)
+    
+    @property
+    def value_render_option(self) -> ValueRenderOption:
+        return self._value_render_option
 
     @classmethod
     def from_value_range(cls, sheet: Sheet, value_range: ValueRange) -> FetchedRange:
@@ -88,7 +104,8 @@ class FetchedRange:
         return cls(
             sheet=sheet,
             grid_range=GridRange.from_a1_notation(sheet_id=sheet.id, range_name=value_range.range_name),
-            fetched_values=value_range.values
+            fetched_values=value_range.values,
+            value_render_option=value_range.value_render_option
         )
 
     @property
@@ -154,7 +171,8 @@ class FetchedRange:
                     )
                     result.append(ValueRange(
                         range_name=cell_range.to_a1_notation(self._sheet.title),
-                        values=[[value]]
+                        values=[[value]],
+                        value_render_option=self.value_render_option
                     ))
         return result
         

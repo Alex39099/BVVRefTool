@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from helper.google_api.sheets._tracked_model import TrackedModel
 from helper.google_api.sheets.grid_range import GridRange
-from helper.google_api.sheets.value_range import FetchedRange, ValueRange
+from helper.google_api.sheets.value_range import FetchedRange, ValueRange, ValueRenderOption
 
 if TYPE_CHECKING:
     from helper.google_api.sheets.data_validation import DataValidation
@@ -63,12 +63,12 @@ class Sheet(TrackedModel):
             new_sheet_title=new_sheet_title
         )
         
-    def fetch_values(self, overwrite_local_changes: bool = True, value_render_option: str = "FORMULA"):
+    def fetch_values(self, overwrite_local_changes: bool = True, value_render_option: ValueRenderOption = ValueRenderOption.FORMULA):
         """ Fetches all values of the spreadsheet.
 
         Args:
             overwrite_local_changes (bool, optional): _description_. Defaults to True.
-            value_render_option (str): the value render option, used for the API call. Defaults to "FORMULA".
+            value_render_option (ValueRenderOption): value render option for the fetch. Defaults to ValueRenderOption.FORMULA.
 
         Raises:
             ValueError: if there are local value changes and overwrite_local_changes is False
@@ -80,7 +80,7 @@ class Sheet(TrackedModel):
             range=self.grid_range.to_a1_notation(self._initial_title),
             valueRenderOption=value_render_option
         ).execute()
-        value_range = ValueRange.from_json(raw)
+        value_range = ValueRange.from_json(raw, value_render_option=value_render_option)
         self.fetched_values = FetchedRange.from_value_range(sheet=self, value_range=value_range)
         
     def __getitem__(self, key: tuple[int, int] | str) -> CellValue:
@@ -266,12 +266,13 @@ class Sheet(TrackedModel):
     def developer_metadata(self) -> SheetDeveloperMetadata:
         return self.spreadsheet._developerMetadata[self.id]
     
-    def copy_paste(self, source: GridRange, destinations: list[GridRange]):
+    def copy_paste(self, source: GridRange, destinations: list[GridRange], value_render_option: ValueRenderOption = ValueRenderOption.FORMULA):
         """ Immediately copy&pastes a source range to (multiple) destinations. Fetches values afterwards.
 
         Args:
-            source (GridRange): source to copy from
-            destinations (list[GridRange]): list of destinations to copy source to (must not overlap with source)
+            source (GridRange): source to copy from.
+            destinations (list[GridRange]): list of destinations to copy source to (must not overlap with source).
+            value_render_option (ValueRenderOption): value render option for the subsequent fetch. Defaults to ValueRenderOption.FORMULA.
 
         Raises:
             ValueError: sheet is stale or was recently duplicated, fetched values are dirty, gridRanges outside the sheet or if source and destinations overlap.
@@ -286,4 +287,4 @@ class Sheet(TrackedModel):
         if any(source.overlaps(destination) for destination in destinations):
             raise ValueError("destinations must not overlap with source")
         self.spreadsheet._copy_paste(source, destinations)
-        self.fetch_values()
+        self.fetch_values(value_render_option=value_render_option)
