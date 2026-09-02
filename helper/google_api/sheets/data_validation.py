@@ -24,7 +24,7 @@ class ValidationRule(ABC):
             "condition": self.condition_json,
             "inputMessage": self.input_message,
             "strict": self.strict,
-            "showCustomUi": True
+            "showCustomUi": self.show_custom_ui
         }
 
 @dataclass(frozen=True)
@@ -71,6 +71,14 @@ class DropDownRangeValidationRule(ValidationRule):
             "values": [{
                 "userEnteredValue": f"={a1_notation_range}"
             }]
+        }
+        
+@dataclass(frozen=True)
+class CheckboxValidationRule(ValidationRule):
+    @property
+    def condition_json(self) -> dict[str, Any]:
+        return {
+            "type": "BOOLEAN"
         }
 
 @dataclass(frozen=True)
